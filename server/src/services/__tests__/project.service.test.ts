@@ -102,6 +102,38 @@ describe('Project Service', () => {
       });
       expect(result).toBe(mockProjects);
     });
+
+    it('scopes listing query by tasks assigned to user when userRole is MEMBER', async () => {
+      const mockProjects = [
+        {
+          id: 'proj-1',
+          organizationId: 'org-1',
+          name: 'Assigned Project',
+          status: 'ACTIVE',
+        },
+      ];
+
+      mockPrisma.project.findMany.mockResolvedValue(mockProjects);
+
+      const result = await listOrganizationProjects({
+        organizationId: 'org-1',
+        userId: 'member-1',
+        userRole: 'MEMBER',
+      });
+
+      expect(mockPrisma.project.findMany).toHaveBeenCalledWith({
+        where: {
+          organizationId: 'org-1',
+          tasks: {
+            some: {
+              assigneeId: 'member-1',
+            },
+          },
+        },
+        orderBy: { createdAt: 'desc' },
+      });
+      expect(result).toBe(mockProjects);
+    });
   });
 
   describe('getProjectById', () => {
@@ -127,6 +159,62 @@ describe('Project Service', () => {
         },
       });
       expect(result).toBe(mockProject);
+    });
+
+    it('scopes single project lookup by tasks assigned to user when userRole is MEMBER', async () => {
+      const mockProject = {
+        id: 'proj-1',
+        organizationId: 'org-1',
+        name: 'Assigned Project',
+        status: 'ACTIVE',
+      };
+
+      mockPrisma.project.findFirst.mockResolvedValue(mockProject);
+
+      const result = await getProjectById({
+        organizationId: 'org-1',
+        projectId: 'proj-1',
+        userId: 'member-1',
+        userRole: 'MEMBER',
+      });
+
+      expect(mockPrisma.project.findFirst).toHaveBeenCalledWith({
+        where: {
+          id: 'proj-1',
+          organizationId: 'org-1',
+          tasks: {
+            some: {
+              assigneeId: 'member-1',
+            },
+          },
+        },
+      });
+      expect(result).toBe(mockProject);
+    });
+
+    it('rejects with "Project not found" when MEMBER attempts to retrieve a project not associated with any task assigned to that member', async () => {
+      mockPrisma.project.findFirst.mockResolvedValue(null);
+
+      await expect(
+        getProjectById({
+          organizationId: 'org-1',
+          projectId: 'unassigned-proj',
+          userId: 'member-1',
+          userRole: 'MEMBER',
+        }),
+      ).rejects.toThrow('Project not found');
+
+      expect(mockPrisma.project.findFirst).toHaveBeenCalledWith({
+        where: {
+          id: 'unassigned-proj',
+          organizationId: 'org-1',
+          tasks: {
+            some: {
+              assigneeId: 'member-1',
+            },
+          },
+        },
+      });
     });
 
     it('rejects with "Project not found" when project does not exist', async () => {

@@ -9,13 +9,19 @@ type CreateProjectInput = {
   description?: string;
 };
 
+type Role = 'OWNER' | 'ADMIN' | 'MANAGER' | 'MEMBER';
+
 type ListProjectsInput = {
   organizationId: string;
+  userId?: string;
+  userRole?: Role;
 };
 
 type GetProjectInput = {
   organizationId: string;
   projectId: string;
+  userId?: string;
+  userRole?: Role;
 };
 
 type UpdateProjectInput = {
@@ -68,10 +74,21 @@ export const createProject = async ({
 
 export const listOrganizationProjects = async ({
   organizationId,
+  userId,
+  userRole,
 }: ListProjectsInput) => {
   return prisma.project.findMany({
     where: {
       organizationId,
+      ...(userRole === 'MEMBER' && userId
+        ? {
+            tasks: {
+              some: {
+                assigneeId: userId,
+              },
+            },
+          }
+        : {}),
     },
     orderBy: {
       createdAt: 'desc',
@@ -82,11 +99,22 @@ export const listOrganizationProjects = async ({
 export const getProjectById = async ({
   organizationId,
   projectId,
+  userId,
+  userRole,
 }: GetProjectInput) => {
   const project = await prisma.project.findFirst({
     where: {
       id: projectId,
       organizationId,
+      ...(userRole === 'MEMBER' && userId
+        ? {
+            tasks: {
+              some: {
+                assigneeId: userId,
+              },
+            },
+          }
+        : {}),
     },
   });
 

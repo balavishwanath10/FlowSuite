@@ -5,6 +5,7 @@ import healthRoutes from './routes/health.routes';
 import authRoutes from './routes/auth.routes';
 import membershipRoutes from './routes/membership.routes';
 import projectRoutes from './routes/project.routes';
+import taskRoutes from './routes/task.routes';
 
 const app = express();
 
@@ -15,6 +16,7 @@ app.use('/api/v1', healthRoutes);
 app.use('/api/v1/auth', authRoutes);
 app.use('/api/v1/memberships', membershipRoutes);
 app.use('/api/v1/projects', projectRoutes);
+app.use('/api/v1/tasks', taskRoutes);
 
 app.listen(config.port, () => {
   console.log(

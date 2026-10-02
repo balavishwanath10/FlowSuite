@@ -6,6 +6,7 @@ export interface AuthenticatedRequest extends Request {
     userId: string;
     organizationId: string;
   };
+  userRole?: 'OWNER' | 'ADMIN' | 'MANAGER' | 'MEMBER';
 }
 
 export const authenticate = (

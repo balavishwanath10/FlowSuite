@@ -55,6 +55,8 @@ router.get(
     try {
       const projects = await listOrganizationProjects({
         organizationId: req.user.organizationId,
+        userId: req.user.userId,
+        userRole: req.userRole,
       });
 
       return res.status(200).json({
@@ -96,6 +98,8 @@ router.get(
       const project = await getProjectById({
         organizationId: req.user.organizationId,
         projectId: paramValidation.data.projectId,
+        userId: req.user.userId,
+        userRole: req.userRole,
       });
 
       return res.status(200).json({

@@ -44,6 +44,7 @@ export const requireRole = (...allowedRoles: Role[]) => {
         });
       }
 
+      req.userRole = membership.role as Role;
       return next();
     } catch {
       return res.status(500).json({
