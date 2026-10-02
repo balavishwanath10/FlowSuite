@@ -4,9 +4,9 @@
 
 FlowSuite is a production-style B2B SaaS platform designed to provide organizations with isolated workspaces for managing teams, customers, projects, and tasks — backed by role-based access control (RBAC), subscription billing, a flexible feature-entitlement engine, usage limits, and audit logging.
 
-## Current Status — Day 3 Authentication & JWT
+## Current Status — Day 5 Project Management Foundation
 
-The repository currently contains the completed **Day 1 foundation, Day 2 database schema, and Day 3 authentication implementation**.
+The repository currently contains the completed **Day 1 foundation, Day 2 database schema, Day 3 authentication, Day 4 organization membership & RBAC, and Day 5 Project Management backend foundation**.
 
 ### Day 1 — Foundation
 
@@ -31,17 +31,38 @@ The repository currently contains the completed **Day 1 foundation, Day 2 databa
 * Login with credential validation.
 * JWT access and refresh token generation.
 * Protected authentication middleware.
-* Authenticated user/organization endpoint.
+* Authenticated user/organization endpoint (`/api/v1/auth/me`).
 * Refresh-token endpoint.
 * Logout endpoint.
 * Password-reset request and password-reset flow.
 * Zod validation for authentication inputs.
-* Automated authentication service tests using Vitest.
-* **17 authentication tests passing.**
-* TypeScript backend build passing.
+
+### Day 4 — Organization Membership & RBAC
+
+* Organization member listing endpoint (`/api/v1/memberships`).
+* Single-use 24-hour invitation token generation (`/api/v1/memberships/invite`).
+* Invitation acceptance flow with account registration (`/api/v1/memberships/accept-invite`).
+* Role update endpoint (`/api/v1/memberships/role`).
+* Member removal endpoint (`/api/v1/memberships/:membershipId`).
+* Four-tier server-side RBAC (`OWNER`, `ADMIN`, `MANAGER`, `MEMBER`).
+* Transactional audit logging (`MEMBER_INVITED`, `INVITATION_ACCEPTED`, `MEMBER_ROLE_UPDATED`, `MEMBER_REMOVED`).
+
+### Day 5 — Project Management Backend Foundation
+
+* Full Project CRUD operations (Create, Read/List, Get by ID, Update, Archive).
+* `/api/v1/projects` endpoint architecture.
+* Organization/tenant isolation: Every operation strictly filtered by authenticated `organizationId`. Cross-tenant queries return 404 (`PROJECT_NOT_FOUND`).
+* Server-side RBAC enforcement:
+  * `OWNER`, `ADMIN`, `MANAGER`: Full project CRUD & archive access.
+  * `MEMBER`: Read-only access (list and view project by ID). Mutations return 403 (`INSUFFICIENT_ROLE`).
+* Archive behavior: Sets project status to `ARCHIVED`.
+* Zod validation for UUID path params, name lengths, descriptions, and statuses.
+* Transactional audit log actions (`PROJECT_CREATED`, `PROJECT_UPDATED`, `PROJECT_ARCHIVED`) via `prisma.$transaction`.
+* **55 automated Vitest unit tests passing across 8 test suites.**
+* TypeScript backend build verified successfully (`npm run build`).
 
 > [!IMPORTANT]
-> **Planned vs. Implemented Functionality:** Authentication and JWT functionality is now implemented and tested. Role-based access control (RBAC), organization membership management, projects, tasks, customers, subscription upgrades/billing, usage enforcement, audit logging, and the remaining business-domain functionality are planned according to the FlowSuite PRD and will be implemented in their scheduled phases.
+> **Planned vs. Implemented Functionality:** Authentication, JWT, RBAC, organization membership, and Project Management backend foundation are now implemented and tested. Tasks, Customers, subscription upgrades/billing, usage enforcement, and remaining business-domain functionality are planned according to the FlowSuite PRD and will be implemented in their scheduled phases.
 
 ## Tech Stack
 
@@ -121,9 +142,9 @@ The client app will run on:
 http://localhost:5173
 ```
 
-## Authentication
+## API Endpoints
 
-FlowSuite currently provides the following authentication endpoints:
+### Authentication
 
 | Method | Endpoint                              | Purpose                                    |
 | ------ | ------------------------------------- | ------------------------------------------ |
@@ -135,16 +156,25 @@ FlowSuite currently provides the following authentication endpoints:
 | POST   | `/api/v1/auth/password-reset/request` | Request a password reset                   |
 | POST   | `/api/v1/auth/password-reset`         | Reset the account password                 |
 
-### Authentication Security
+### Organization & Memberships
 
-* Passwords are hashed using bcrypt before storage.
-* Access tokens and refresh tokens are signed using separate JWT secrets.
-* Access tokens are short-lived.
-* Refresh tokens have a longer lifetime.
-* Protected endpoints require a valid Bearer access token.
-* Authentication input is validated using Zod.
-* Invalid credentials return a consistent authentication error.
-* Password-reset tokens are time-limited and single-use within the current server process.
+| Method | Endpoint                            | Permitted Roles             | Purpose                                      |
+| ------ | ----------------------------------- | --------------------------- | -------------------------------------------- |
+| GET    | `/api/v1/memberships`               | OWNER, ADMIN, MANAGER, MEMBER | List organization members                    |
+| POST   | `/api/v1/memberships/invite`        | OWNER, ADMIN                | Generate member invitation token             |
+| POST   | `/api/v1/memberships/accept-invite` | Public (Token-based)        | Accept invitation & create account/membership|
+| PATCH  | `/api/v1/memberships/role`          | OWNER                       | Update member role                           |
+| DELETE | `/api/v1/memberships/:membershipId` | OWNER                       | Remove member from organization              |
+
+### Project Management
+
+| Method | Endpoint                         | Permitted Roles             | Purpose                                      |
+| ------ | -------------------------------- | --------------------------- | -------------------------------------------- |
+| GET    | `/api/v1/projects`               | OWNER, ADMIN, MANAGER, MEMBER | List organization projects                   |
+| GET    | `/api/v1/projects/:projectId`    | OWNER, ADMIN, MANAGER, MEMBER | Get project details by ID                    |
+| POST   | `/api/v1/projects`               | OWNER, ADMIN, MANAGER       | Create a new project                         |
+| PATCH  | `/api/v1/projects/:projectId`    | OWNER, ADMIN, MANAGER       | Update project name/description/status       |
+| POST   | `/api/v1/projects/:projectId/archive` | OWNER, ADMIN, MANAGER | Archive a project                            |
 
 ## Testing
 
@@ -162,30 +192,26 @@ Build the backend:
 npm run build
 ```
 
-Current Day 3 authentication test coverage includes:
+Current test coverage includes:
 
 * Access-token generation and verification.
 * Refresh-token generation and verification.
-* Invalid access-token rejection.
-* Invalid refresh-token rejection.
-* Duplicate registration rejection.
-* Missing Free-plan configuration handling.
-* Successful organization registration flow.
-* Invalid login credentials.
-* Missing organization membership.
-* Successful login.
-* Refresh-token handling.
-* Password-reset token generation.
-* Password-reset validation.
-* Password update handling.
+* Registration & organization creation.
+* Login & password reset.
+* Organization membership & single-use invitation token flows.
+* RBAC middleware permission enforcement across roles (`OWNER`, `ADMIN`, `MANAGER`, `MEMBER`).
+* Project CRUD operations (create, read/list, get by ID, update, archive).
+* Project RBAC permissions (MEMBER mutation prohibition).
+* Cross-tenant isolation verification across membership and project domains.
 
-**Current result: 17 authentication tests passing.**
+**Current result: 55 automated tests passing across 8 test suites.**
+**Build status: `npm run build` passing cleanly.**
 
 ## Database
 
 FlowSuite uses PostgreSQL with Prisma ORM.
 
-The database currently contains the following core entities:
+The database contains the following core entities:
 
 * User
 * Organization
@@ -223,75 +249,52 @@ npx prisma studio
 * PostgreSQL and Redis connected.
 * Backend and frontend foundations created.
 * Health endpoint implemented.
-* Initial documentation created.
 
 #### Day 2 — Database
 
 * Complete Prisma database schema implemented.
 * Initial migration created and applied.
 * Subscription plans seeded.
-* Database documentation updated.
 
 #### Day 3 — Authentication
 
-* Registration implemented.
-* Login implemented.
+* Registration & login implemented.
 * JWT access and refresh tokens implemented.
-* Authentication middleware implemented.
-* `/me` endpoint implemented.
-* Refresh endpoint implemented.
-* Logout endpoint implemented.
 * Password-reset flow implemented.
-* Authentication validation implemented with Zod.
-* Authentication tests implemented with Vitest.
 * 17 authentication tests passing.
-* Backend build verified successfully.
 
-### Upcoming Development
+#### Day 4 — Organization & RBAC
 
-The remaining functionality will be implemented according to the FlowSuite PRD schedule.
+* Membership management implemented.
+* Invitation & single-use token acceptance flow implemented.
+* Server-side RBAC middleware implemented.
+* Transactional audit logging implemented.
+* 39 tests passing.
 
-#### Day 4–5 — Organization & RBAC
+### Week 2
 
-* Organization membership management.
-* Owner/Admin invitations.
-* Role management.
-* Owner, Admin, Manager, and Member permissions.
-* Server-side authorization checks.
+#### Day 5 — Project Management Foundation
 
-#### Day 6–7 — Projects, Tasks & Customers
+* Project CRUD services & routes implemented.
+* Project archive status management.
+* Strict tenant isolation on project operations.
+* RBAC guards: `OWNER`, `ADMIN`, `MANAGER` write/archive, `MEMBER` read-only.
+* Transactional audit logs (`PROJECT_CREATED`, `PROJECT_UPDATED`, `PROJECT_ARCHIVED`).
+* Zod schema validation for inputs and UUID path parameters.
+* **55 automated tests passing.**
+* Backend build verified.
 
-* Organization-scoped project management.
-* Organization-scoped task management.
-* Organization-scoped customer management.
-* Tenant-isolation verification.
+#### Upcoming Development
 
-#### Week 3 — Subscriptions & Usage
-
-* Subscription and plan logic.
-* Entitlement checks.
-* Seat and project limits.
-* API request usage limits.
-* Stripe test-mode integration.
-* Billing and usage dashboard.
-* Audit logging.
-
-#### Week 4 — Testing, Documentation & Deployment
-
-* Backend business-logic coverage target.
-* Tenant-isolation integration testing.
-* Validation and rate limiting.
-* API documentation.
-* Architecture documentation.
-* Docker deployment verification.
-* Cloud deployment.
-* Final acceptance-criteria verification.
+* **Day 6–7**: Tasks & Customers implementation.
+* **Week 3**: Subscriptions, Usage Limits & Billing.
+* **Week 4**: Final Testing, Documentation & Deployment.
 
 ## Project Scope
 
 FlowSuite development follows the approved Product Requirements Document (PRD).
 
-The implementation will focus only on the functionality defined in the PRD. Features outside the approved scope will not be added unless the project requirements are formally changed.
+The implementation focuses only on the functionality defined in the PRD. Features outside the approved scope will not be added unless project requirements are formally modified.
 
 ## License
 
