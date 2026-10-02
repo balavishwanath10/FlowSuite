@@ -6,7 +6,7 @@ FlowSuite uses PostgreSQL 16 as its relational database, with Prisma ORM used fo
 
 ## Database Schema
 
-The database schema introduces the core entities required by the FlowSuite PRD:
+The database schema contains the core entities required by the FlowSuite PRD:
 
 * **User** — stores user account information.
 * **Organization** — represents a FlowSuite tenant/workspace.
@@ -21,57 +21,84 @@ The database schema introduces the core entities required by the FlowSuite PRD:
 
 ## Multi-Tenant Data Structure
 
-Tenant-owned entities contain an `organizationId` relationship where required.
+Tenant-owned entities contain an `organizationId` relationship or derive it through parent relations (e.g. `Task -> Project -> Organization`).
 
-This structure is designed to support strict organization-level data isolation. Future API queries must always use the authenticated user's organization context when accessing tenant-owned data.
+This structure supports strict organization-level data isolation. API queries always use the authenticated user's organization context when accessing tenant-owned data.
 
-Cross-organization access must not be possible through either the frontend or direct API requests.
+Cross-organization access is blocked through server-side query scoping and authorization middleware.
 
 ## Roles
 
 The `Membership` model supports the four roles defined in the PRD:
 
-* Owner
-* Admin
-* Manager
-* Member
+* `OWNER`
+* `ADMIN`
+* `MANAGER`
+* `MEMBER`
 
-Role-based authorization will be implemented in the backend during the authentication and RBAC development phase.
+Server-side role authorization is enforced across organization endpoints, project management, and task operations.
 
-## Subscription Plans
+## Task Data Model & Relationships
 
-The `Plan` model stores subscription limits in the database instead of hard-coding them in application logic.
+### Task Entity
 
-The schema supports:
+The `Task` model includes the following fields:
 
+* `id` — UUID primary key.
+* `projectId` — foreign key referencing `Project.id`.
+* `assigneeId` — optional foreign key referencing `User.id`.
+* `title` — string task title.
+* `description` — optional detailed task description.
+* `status` — enum (`TODO`, `IN_PROGRESS`, `COMPLETED`), defaulting to `TODO`.
+* `createdAt` / `updatedAt` — timestamps.
+
+### Entity Relationships
+
+* A **Task** belongs to a **Project** (`Task.projectId -> Project.id`, cascade delete).
+* A **Task** may be assigned to a **User** (`Task.assigneeId -> User.id`, set null on delete).
+* A **Project** belongs to an **Organization** (`Project.organizationId -> Organization.id`).
+
+Because `Task` belongs to `Project` which belongs to `Organization`, tenant isolation for `Task` records is derived through the `Project -> Organization` relation (`task.project.organizationId = authenticated organizationId`).
+
+### Query Isolation
+
+All task database queries enforce organization scoping:
+
+```text
+task.project.organizationId = authenticated organizationId
+```
+
+For users with the `MEMBER` role, Prisma queries enforce member-assigned task visibility directly in the database `where` clause:
+
+```text
+task.assigneeId = authenticated userId
+```
+
+This prevents `MEMBER` users from querying, viewing, or updating tasks assigned to other users and guarantees strict tenant boundary enforcement.
+
+### Project Visibility Derivation for Members
+
+`MEMBER` project visibility is derived directly from task assignments:
+
+A user with the `MEMBER` role can see a project only when the project contains at least one task assigned to that Member (`tasks.some.assigneeId = authenticated userId`). No separate `MemberToProject` join table was added or required for Day 6.
+
+### AuditLog Integration
+
+Task mutations (`TASK_CREATED`, `TASK_UPDATED`, `TASK_ASSIGNED`, `TASK_STATUS_UPDATED`) execute within Prisma transactions (`prisma.$transaction`) to atomically write an entry to the `AuditLog` table with `organizationId` and `actorId`.
+
+## Subscription Plans & States
+
+The `Plan` model stores subscription limits in the database:
 * Seat limits
 * Project limits
 * Monthly API request limits
 * Advanced analytics entitlement
 
-The three plans defined by the PRD are:
+The three plans defined by the PRD are Free, Starter, and Professional.
 
-* Free
-* Starter
-* Professional
+The `Subscription` model supports states `TRIALING`, `ACTIVE`, `PAST_DUE`, `CANCELLED`, and `EXPIRED`, with Stripe integration identifiers.
 
-The actual plan records and entitlement enforcement will be implemented during the billing and subscription phase.
-
-## Subscription States
-
-The `Subscription` model supports the following states:
-
-* TRIALING
-* ACTIVE
-* PAST_DUE
-* CANCELLED
-* EXPIRED
-
-Stripe identifiers are included in the schema to support the PRD's future Stripe test-mode integration.
-
-## Database Relationships
-
-The main relationships are structured as follows:
+## Database Relationships Summary
 
 ```text
 Organization
@@ -95,53 +122,17 @@ Plan
 
 ## Indexes and Constraints
 
-Indexes have been added to commonly queried fields such as:
+Indexes defined in the Prisma schema include:
 
-* Organization IDs
-* User IDs
-* Project status
-* Task status
-* Subscription status
-* Audit log timestamps
-* Usage periods
+* `Organization`: primary key, unique constraints.
+* `Membership`: `@@index([organizationId])`, `@@index([userId])`, `@@unique([organizationId, userId])`.
+* `Project`: `@@index([organizationId])`, `@@index([organizationId, status])`.
+* `Task`: `@@index([projectId])`, `@@index([assigneeId])`, `@@index([projectId, status])`.
+* `Subscription`: `@@index([planId])`, `@@index([status])`, unique constraints on `organizationId`, `stripeCustomerId`, `stripeSubscriptionId`.
+* `AuditLog`: `@@index([organizationId])`, `@@index([actorId])`, `@@index([organizationId, createdAt])`.
+* `UsageCounter`: `@@index([organizationId])`, `@@unique([organizationId, year, month])`.
 
-Unique constraints are also used where required, including:
+## Migration Status
 
-* User email
-* Organization membership per user
-* One subscription per organization
-* One usage counter per organization
-
-These constraints help maintain data consistency and support efficient database queries.
-
-## Migration Workflow
-
-All database schema changes are managed through Prisma migrations.
-
-The development workflow is:
-
-```bash
-npx prisma migrate dev --name <migration_name>
-```
-
-Generated migration files are committed to Git so that database changes remain version-controlled.
-
-Direct schema updates using `prisma db push` are not used as the project's migration workflow.
-
-
-
-The initial application schema was introduced through:
-
-```text
-20261002043238_init
-```
-
-The migration was successfully created and applied to the PostgreSQL database.
-
-The database was verified through Prisma Studio, where all ten core models were confirmed to be available.
-
-## Current Status
-
-The FlowSuite database foundation is implemented and synchronized with the Prisma schema.
-
-Authentication, RBAC enforcement, API endpoints, business logic, billing integration, and frontend application features remain planned for subsequent development phases.
+* **Initial Migration**: `20261002043238_init` introduced all ten core models.
+* **Day 6 Status**: Day 6 required **no database schema changes or migrations**, as the existing `Task`, `Project`, `User`, `Organization`, and `AuditLog` models introduced in the Day 2 baseline fully satisfied all Day 6 PRD requirements.

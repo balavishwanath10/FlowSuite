@@ -4,9 +4,9 @@
 
 FlowSuite is a production-style B2B SaaS platform designed to provide organizations with isolated workspaces for managing teams, customers, projects, and tasks — backed by role-based access control (RBAC), subscription billing, a flexible feature-entitlement engine, usage limits, and audit logging.
 
-## Current Status — Day 5 Project Management Foundation
+## Current Status — Day 6 Task Management Backend Foundation
 
-The repository currently contains the completed **Day 1 foundation, Day 2 database schema, Day 3 authentication, Day 4 organization membership & RBAC, and Day 5 Project Management backend foundation**.
+The repository currently contains the completed **Day 1 foundation, Day 2 database schema, Day 3 authentication, Day 4 organization membership & RBAC, Day 5 project management, and Day 6 task management and Member project/task visibility**.
 
 ### Day 1 — Foundation
 
@@ -58,11 +58,26 @@ The repository currently contains the completed **Day 1 foundation, Day 2 databa
 * Archive behavior: Sets project status to `ARCHIVED`.
 * Zod validation for UUID path params, name lengths, descriptions, and statuses.
 * Transactional audit log actions (`PROJECT_CREATED`, `PROJECT_UPDATED`, `PROJECT_ARCHIVED`) via `prisma.$transaction`.
-* **55 automated Vitest unit tests passing across 8 test suites.**
+
+### Day 6 — Task Management & Member Visibility
+
+* Task creation, listing, retrieval by ID, general updates, status updates, and assignment/reassignment.
+* `/api/v1/tasks` endpoint architecture.
+* Organization/tenant isolation: All task operations resolved through the authenticated user's `organizationId` via the parent project relationship (`task.project.organizationId = req.user.organizationId`). Cross-tenant resources return 404 (`TASK_NOT_FOUND` / `PROJECT_NOT_FOUND`).
+* Server-side RBAC enforcement:
+  * `OWNER`, `ADMIN`, `MANAGER`: Task creation (`POST /api/v1/tasks`) and task assignment (`PATCH /api/v1/tasks/:taskId/assign`).
+  * `OWNER`, `ADMIN`: Arbitrary task updates (`PATCH /api/v1/tasks/:taskId`).
+  * All authenticated roles (`OWNER`, `ADMIN`, `MANAGER`, `MEMBER`) may update task status (`PATCH /api/v1/tasks/:taskId/status`), but `MEMBER` users may update status only for tasks assigned to themselves.
+* Member-specific task visibility: `MEMBER` users can only view tasks assigned to themselves (`assigneeId = userId`), enforced directly at the Prisma query layer.
+* Member-specific project visibility: `MEMBER` users can only view projects containing tasks assigned to themselves (`tasks.some.assigneeId = userId`).
+* Assignee organization validation: Validates that assignee users belong to the authenticated organization.
+* Zod input validation for UUIDs, titles, descriptions, statuses, and query parameters.
+* Transactional audit log actions (`TASK_CREATED`, `TASK_UPDATED`, `TASK_ASSIGNED`, `TASK_STATUS_UPDATED`) via `prisma.$transaction`.
+* **84 automated Vitest unit tests passing across 9 test suites.**
 * TypeScript backend build verified successfully (`npm run build`).
 
 > [!IMPORTANT]
-> **Planned vs. Implemented Functionality:** Authentication, JWT, RBAC, organization membership, and Project Management backend foundation are now implemented and tested. Tasks, Customers, subscription upgrades/billing, usage enforcement, and remaining business-domain functionality are planned according to the FlowSuite PRD and will be implemented in their scheduled phases.
+> **Planned vs. Implemented Functionality:** Authentication, JWT, RBAC, organization membership, Project Management, and Task Management backend foundations are now implemented and tested. Customers, subscription upgrades/billing, usage enforcement, and remaining business-domain functionality are planned according to the FlowSuite PRD and will be implemented in their scheduled phases.
 
 ## Tech Stack
 
@@ -170,11 +185,22 @@ http://localhost:5173
 
 | Method | Endpoint                         | Permitted Roles             | Purpose                                      |
 | ------ | -------------------------------- | --------------------------- | -------------------------------------------- |
-| GET    | `/api/v1/projects`               | OWNER, ADMIN, MANAGER, MEMBER | List organization projects                   |
-| GET    | `/api/v1/projects/:projectId`    | OWNER, ADMIN, MANAGER, MEMBER | Get project details by ID                    |
+| GET    | `/api/v1/projects`               | OWNER, ADMIN, MANAGER, MEMBER | List organization projects (MEMBER: Assigned-task projects only) |
+| GET    | `/api/v1/projects/:projectId`    | OWNER, ADMIN, MANAGER, MEMBER | Get project details by ID (MEMBER: Assigned-task project only)   |
 | POST   | `/api/v1/projects`               | OWNER, ADMIN, MANAGER       | Create a new project                         |
 | PATCH  | `/api/v1/projects/:projectId`    | OWNER, ADMIN, MANAGER       | Update project name/description/status       |
 | POST   | `/api/v1/projects/:projectId/archive` | OWNER, ADMIN, MANAGER | Archive a project                            |
+
+### Task Management
+
+| Method | Endpoint | Permitted Roles | Purpose |
+| ------ | -------- | --------------- | ------- |
+| GET | `/api/v1/tasks` | OWNER, ADMIN, MANAGER, MEMBER | List tasks (MEMBER: Assigned tasks only) |
+| GET | `/api/v1/tasks/:taskId` | OWNER, ADMIN, MANAGER, MEMBER | Get task by ID (MEMBER: Assigned task only) |
+| POST | `/api/v1/tasks` | OWNER, ADMIN, MANAGER | Create a new task |
+| PATCH | `/api/v1/tasks/:taskId` | OWNER, ADMIN | Update arbitrary task fields |
+| PATCH | `/api/v1/tasks/:taskId/status` | OWNER, ADMIN, MANAGER, MEMBER | Update task status (MEMBER: Assigned task only) |
+| PATCH | `/api/v1/tasks/:taskId/assign` | OWNER, ADMIN, MANAGER | Assign or unassign task |
 
 ## Testing
 
@@ -199,12 +225,15 @@ Current test coverage includes:
 * Registration & organization creation.
 * Login & password reset.
 * Organization membership & single-use invitation token flows.
-* RBAC middleware permission enforcement across roles (`OWNER`, `ADMIN`, `MANAGER`, `MEMBER`).
+* Server-side RBAC middleware permission enforcement across roles (`OWNER`, `ADMIN`, `MANAGER`, `MEMBER`).
 * Project CRUD operations (create, read/list, get by ID, update, archive).
-* Project RBAC permissions (MEMBER mutation prohibition).
-* Cross-tenant isolation verification across membership and project domains.
+* Project RBAC permissions & Member project visibility scoping.
+* Task CRUD operations (create, read/list, get by ID, update, assign, update status).
+* Task RBAC permissions (OWNER/ADMIN general update, MANAGER create/assign/status, MEMBER status-only for assigned tasks).
+* Member task visibility scoping directly in Prisma queries.
+* Cross-tenant isolation verification across membership, project, and task domains.
 
-**Current result: 55 automated tests passing across 8 test suites.**
+**Current result: 84 automated tests passing across 9 test suites.**
 **Build status: `npm run build` passing cleanly.**
 
 ## Database
@@ -281,12 +310,24 @@ npx prisma studio
 * RBAC guards: `OWNER`, `ADMIN`, `MANAGER` write/archive, `MEMBER` read-only.
 * Transactional audit logs (`PROJECT_CREATED`, `PROJECT_UPDATED`, `PROJECT_ARCHIVED`).
 * Zod schema validation for inputs and UUID path parameters.
-* **55 automated tests passing.**
+* 55 automated tests passing.
 * Backend build verified.
+
+#### Day 6 — Task Management
+
+* Task CRUD, status update, and task assignment services & routes implemented.
+* Task and project multi-tenant isolation via `req.user.organizationId`.
+* Member-specific task visibility (`assigneeId = userId`) enforced directly in Prisma queries.
+* Member-specific project visibility based on assigned tasks (`tasks.some.assigneeId = userId`).
+* Server-side RBAC enforcement (OWNER/ADMIN full update, MANAGER create/assign/status, MEMBER status-only on assigned tasks).
+* Transactional audit logs (`TASK_CREATED`, `TASK_UPDATED`, `TASK_ASSIGNED`, `TASK_STATUS_UPDATED`).
+* Comprehensive task service, RBAC middleware, and Member project visibility unit tests.
+* **84 automated tests passing across 9 test suites.**
+* Backend build verified (`npm run build`).
 
 #### Upcoming Development
 
-* **Day 6–7**: Tasks & Customers implementation.
+* **Day 7**: Customers implementation.
 * **Week 3**: Subscriptions, Usage Limits & Billing.
 * **Week 4**: Final Testing, Documentation & Deployment.
 
