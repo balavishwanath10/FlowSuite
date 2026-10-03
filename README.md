@@ -4,9 +4,9 @@
 
 FlowSuite is a production-style B2B SaaS platform designed to provide organizations with isolated workspaces for managing teams, customers, projects, and tasks — backed by role-based access control (RBAC), subscription billing, a flexible feature-entitlement engine, usage limits, and audit logging.
 
-## Current Status — Day 6 Task Management Backend Foundation
+## Current Status — Day 7 Customer Management Backend Foundation
 
-The repository currently contains the completed **Day 1 foundation, Day 2 database schema, Day 3 authentication, Day 4 organization membership & RBAC, Day 5 project management, and Day 6 task management and Member project/task visibility**.
+The repository currently contains the completed **Day 1 foundation, Day 2 database schema, Day 3 authentication, Day 4 organization membership & RBAC, Day 5 project management, Day 6 task management, and Day 7 customer management**.
 
 ### Day 1 — Foundation
 
@@ -73,11 +73,24 @@ The repository currently contains the completed **Day 1 foundation, Day 2 databa
 * Assignee organization validation: Validates that assignee users belong to the authenticated organization.
 * Zod input validation for UUIDs, titles, descriptions, statuses, and query parameters.
 * Transactional audit log actions (`TASK_CREATED`, `TASK_UPDATED`, `TASK_ASSIGNED`, `TASK_STATUS_UPDATED`) via `prisma.$transaction`.
-* **84 automated Vitest unit tests passing across 9 test suites.**
+
+### Day 7 — Customer Management Backend Foundation
+
+* Full Customer CRUD operations (Create, List, Get by ID, Update, Delete).
+* `/api/v1/customers` endpoint architecture using the existing Day 2 Prisma `Customer` model (`id`, `organizationId`, `name`, `email`, `phone`, `createdAt`, `updatedAt`).
+* Customer relationships: Customer belongs to Organization; Customer ↔ Project relationship via existing `Project.customers` relation.
+* Organization/tenant isolation: Every operation strictly scoped by `req.user.organizationId`. Cross-tenant requests return 404 (`CUSTOMER_NOT_FOUND`).
+* Server-side RBAC enforcement:
+  * `OWNER`, `ADMIN`, `MANAGER`: Full Customer CRUD access.
+  * `MEMBER`: No access to customer endpoints (all customer requests return 403 `INSUFFICIENT_ROLE`).
+* Zod validation for body data (name length, email format, phone format) and UUID URL parameters.
+* Transactional audit log actions (`CUSTOMER_CREATED`, `CUSTOMER_UPDATED`, `CUSTOMER_DELETED`) via `prisma.$transaction`.
+* **98 automated Vitest unit tests passing across 10 test suites.**
 * TypeScript backend build verified successfully (`npm run build`).
+* No Prisma schema modifications or migrations were required.
 
 > [!IMPORTANT]
-> **Planned vs. Implemented Functionality:** Authentication, JWT, RBAC, organization membership, Project Management, and Task Management backend foundations are now implemented and tested. Customers, subscription upgrades/billing, usage enforcement, and remaining business-domain functionality are planned according to the FlowSuite PRD and will be implemented in their scheduled phases.
+> **Planned vs. Implemented Functionality:** Authentication, JWT, RBAC, organization membership, Project Management, Task Management, and Customer Management backend foundations are now implemented and tested. Subscription upgrades/billing, usage enforcement, and remaining business-domain functionality are planned according to the FlowSuite PRD and will be implemented in their scheduled phases.
 
 ## Tech Stack
 
@@ -202,6 +215,16 @@ http://localhost:5173
 | PATCH | `/api/v1/tasks/:taskId/status` | OWNER, ADMIN, MANAGER, MEMBER | Update task status (MEMBER: Assigned task only) |
 | PATCH | `/api/v1/tasks/:taskId/assign` | OWNER, ADMIN, MANAGER | Assign or unassign task |
 
+### Customer Management
+
+| Method | Endpoint | Permitted Roles | Purpose |
+| ------ | -------- | --------------- | ------- |
+| GET | `/api/v1/customers` | OWNER, ADMIN, MANAGER | List organization customers |
+| GET | `/api/v1/customers/:customerId` | OWNER, ADMIN, MANAGER | Get customer details by ID |
+| POST | `/api/v1/customers` | OWNER, ADMIN, MANAGER | Create a new customer |
+| PATCH | `/api/v1/customers/:customerId` | OWNER, ADMIN, MANAGER | Update customer details |
+| DELETE | `/api/v1/customers/:customerId` | OWNER, ADMIN, MANAGER | Delete a customer |
+
 ## Testing
 
 The backend uses Vitest for automated service-level testing.
@@ -229,11 +252,14 @@ Current test coverage includes:
 * Project CRUD operations (create, read/list, get by ID, update, archive).
 * Project RBAC permissions & Member project visibility scoping.
 * Task CRUD operations (create, read/list, get by ID, update, assign, update status).
-* Task RBAC permissions (OWNER/ADMIN general update, MANAGER create/assign/status, MEMBER status-only for assigned tasks).
-* Member task visibility scoping directly in Prisma queries.
-* Cross-tenant isolation verification across membership, project, and task domains.
+* Task RBAC permissions & Member task visibility scoping directly in Prisma queries.
+* Customer CRUD operations (create, read/list, get by ID, update, delete).
+* Customer RBAC permissions (`OWNER`/`ADMIN`/`MANAGER` full CRUD; `MEMBER` total denial).
+* Cross-tenant isolation verification across membership, project, task, and customer domains.
 
-**Current result: 84 automated tests passing across 9 test suites.**
+Note: Current tests consist of service-level unit tests with mocked Prisma, alongside isolated RBAC middleware unit tests. No HTTP end-to-end integration tests or live PostgreSQL integration tests are involved.
+
+**Current result: 98 automated tests passing across 10 test suites.**
 **Build status: `npm run build` passing cleanly.**
 
 ## Database
@@ -322,12 +348,23 @@ npx prisma studio
 * Server-side RBAC enforcement (OWNER/ADMIN full update, MANAGER create/assign/status, MEMBER status-only on assigned tasks).
 * Transactional audit logs (`TASK_CREATED`, `TASK_UPDATED`, `TASK_ASSIGNED`, `TASK_STATUS_UPDATED`).
 * Comprehensive task service, RBAC middleware, and Member project visibility unit tests.
-* **84 automated tests passing across 9 test suites.**
+* 84 automated tests passing across 9 test suites.
 * Backend build verified (`npm run build`).
+
+#### Day 7 — Customer Management
+
+* Customer CRUD services and endpoints (`/api/v1/customers`) implemented using the existing Day 2 `Customer` Prisma model.
+* Customer tenant isolation enforced via `req.user.organizationId`. Cross-tenant queries return 404 (`CUSTOMER_NOT_FOUND`).
+* Server-side RBAC enforcement (`OWNER`, `ADMIN`, `MANAGER` full CRUD; `MEMBER` denied all operations with 403 `INSUFFICIENT_ROLE`).
+* Transactional audit logs (`CUSTOMER_CREATED`, `CUSTOMER_UPDATED`, `CUSTOMER_DELETED`).
+* Zod validation for body inputs and customer ID route parameters.
+* Comprehensive customer service and RBAC middleware unit tests.
+* **98 automated tests passing across 10 test suites.**
+* Backend build verified (`npm run build`).
+* No schema changes or migrations required.
 
 #### Upcoming Development
 
-* **Day 7**: Customers implementation.
 * **Week 3**: Subscriptions, Usage Limits & Billing.
 * **Week 4**: Final Testing, Documentation & Deployment.
 

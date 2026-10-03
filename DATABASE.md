@@ -21,7 +21,7 @@ The database schema contains the core entities required by the FlowSuite PRD:
 
 ## Multi-Tenant Data Structure
 
-Tenant-owned entities contain an `organizationId` relationship or derive it through parent relations (e.g. `Task -> Project -> Organization`).
+Tenant-owned entities contain an `organizationId` relationship or derive it through parent relations (e.g. `Customer -> Organization`, `Task -> Project -> Organization`).
 
 This structure supports strict organization-level data isolation. API queries always use the authenticated user's organization context when accessing tenant-owned data.
 
@@ -36,7 +36,43 @@ The `Membership` model supports the four roles defined in the PRD:
 * `MANAGER`
 * `MEMBER`
 
-Server-side role authorization is enforced across organization endpoints, project management, and task operations.
+Server-side role authorization is enforced across organization endpoints, project management, task operations, and customer management.
+
+## Customer Data Model & Relationships
+
+### Customer Entity
+
+The `Customer` model includes the following fields:
+
+* `id` — UUID primary key.
+* `organizationId` — foreign key referencing `Organization.id`.
+* `name` — string customer name.
+* `email` — optional string email address.
+* `phone` — optional string phone number.
+* `createdAt` / `updatedAt` — timestamps.
+
+### Entity Relationships
+
+* A **Customer** belongs to an **Organization** (`Customer.organizationId -> Organization.id`, cascade delete).
+* A **Customer** may be associated with **Projects** (`Customer.projects <-> Project.customers` implicit many-to-many relationship).
+
+`organizationId` serves as the explicit tenant isolation boundary for all `Customer` records.
+
+### Query Isolation
+
+All customer database queries enforce organization scoping:
+
+```text
+customer.id = requested customerId
+AND
+customer.organizationId = authenticated organizationId
+```
+
+This prevents cross-tenant customer retrieval, updates, or deletions. Attempts to query or mutate a customer belonging to another organization return a generic `CUSTOMER_NOT_FOUND` (404) response.
+
+### AuditLog Integration
+
+Customer mutations (`CUSTOMER_CREATED`, `CUSTOMER_UPDATED`, `CUSTOMER_DELETED`) execute within Prisma transactions (`prisma.$transaction`) to atomically write an entry to the `AuditLog` table with `organizationId` and `actorId`.
 
 ## Task Data Model & Relationships
 
@@ -52,39 +88,13 @@ The `Task` model includes the following fields:
 * `status` — enum (`TODO`, `IN_PROGRESS`, `COMPLETED`), defaulting to `TODO`.
 * `createdAt` / `updatedAt` — timestamps.
 
-### Entity Relationships
+### Entity Relationships & Query Isolation
 
 * A **Task** belongs to a **Project** (`Task.projectId -> Project.id`, cascade delete).
 * A **Task** may be assigned to a **User** (`Task.assigneeId -> User.id`, set null on delete).
 * A **Project** belongs to an **Organization** (`Project.organizationId -> Organization.id`).
 
-Because `Task` belongs to `Project` which belongs to `Organization`, tenant isolation for `Task` records is derived through the `Project -> Organization` relation (`task.project.organizationId = authenticated organizationId`).
-
-### Query Isolation
-
-All task database queries enforce organization scoping:
-
-```text
-task.project.organizationId = authenticated organizationId
-```
-
-For users with the `MEMBER` role, Prisma queries enforce member-assigned task visibility directly in the database `where` clause:
-
-```text
-task.assigneeId = authenticated userId
-```
-
-This prevents `MEMBER` users from querying, viewing, or updating tasks assigned to other users and guarantees strict tenant boundary enforcement.
-
-### Project Visibility Derivation for Members
-
-`MEMBER` project visibility is derived directly from task assignments:
-
-A user with the `MEMBER` role can see a project only when the project contains at least one task assigned to that Member (`tasks.some.assigneeId = authenticated userId`). No separate `MemberToProject` join table was added or required for Day 6.
-
-### AuditLog Integration
-
-Task mutations (`TASK_CREATED`, `TASK_UPDATED`, `TASK_ASSIGNED`, `TASK_STATUS_UPDATED`) execute within Prisma transactions (`prisma.$transaction`) to atomically write an entry to the `AuditLog` table with `organizationId` and `actorId`.
+Tenant isolation for `Task` records is derived through the `Project -> Organization` relation (`task.project.organizationId = authenticated organizationId`). For `MEMBER` users, queries enforce `task.assigneeId = authenticated userId`.
 
 ## Subscription Plans & States
 
@@ -107,6 +117,7 @@ Organization
 │   ├── Task
 │   └── Customer
 ├── Customer
+│   └── Project
 ├── Subscription
 ├── UsageCounter
 └── AuditLog
@@ -128,6 +139,7 @@ Indexes defined in the Prisma schema include:
 * `Membership`: `@@index([organizationId])`, `@@index([userId])`, `@@unique([organizationId, userId])`.
 * `Project`: `@@index([organizationId])`, `@@index([organizationId, status])`.
 * `Task`: `@@index([projectId])`, `@@index([assigneeId])`, `@@index([projectId, status])`.
+* `Customer`: `@@index([organizationId])`, `@@index([organizationId, email])`.
 * `Subscription`: `@@index([planId])`, `@@index([status])`, unique constraints on `organizationId`, `stripeCustomerId`, `stripeSubscriptionId`.
 * `AuditLog`: `@@index([organizationId])`, `@@index([actorId])`, `@@index([organizationId, createdAt])`.
 * `UsageCounter`: `@@index([organizationId])`, `@@unique([organizationId, year, month])`.
@@ -135,4 +147,4 @@ Indexes defined in the Prisma schema include:
 ## Migration Status
 
 * **Initial Migration**: `20261002043238_init` introduced all ten core models.
-* **Day 6 Status**: Day 6 required **no database schema changes or migrations**, as the existing `Task`, `Project`, `User`, `Organization`, and `AuditLog` models introduced in the Day 2 baseline fully satisfied all Day 6 PRD requirements.
+* **Day 7 Status**: Day 7 required **no database schema changes or migrations**, as the existing `Customer`, `Project`, `Organization`, and `AuditLog` models introduced in the Day 2 baseline fully satisfied all Day 7 PRD requirements. No new tables, columns, indexes, constraints, status/archive fields, or relationships were added.
