@@ -7,6 +7,7 @@ import membershipRoutes from './routes/membership.routes';
 import projectRoutes from './routes/project.routes';
 import taskRoutes from './routes/task.routes';
 import customerRoutes from './routes/customer.routes';
+import auditLogRoutes from './routes/audit-log.routes';
 
 const app = express();
 
@@ -19,6 +20,7 @@ app.use('/api/v1/memberships', membershipRoutes);
 app.use('/api/v1/projects', projectRoutes);
 app.use('/api/v1/tasks', taskRoutes);
 app.use('/api/v1/customers', customerRoutes);
+app.use('/api/v1/audit-logs', auditLogRoutes);
 
 app.listen(config.port, () => {
   console.log(

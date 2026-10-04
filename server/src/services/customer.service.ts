@@ -32,6 +32,25 @@ type DeleteCustomerInput = {
   customerId: string;
 };
 
+type LinkCustomerProjectInput = {
+  organizationId: string;
+  actorId: string;
+  customerId: string;
+  projectId: string;
+};
+
+type UnlinkCustomerProjectInput = {
+  organizationId: string;
+  actorId: string;
+  customerId: string;
+  projectId: string;
+};
+
+type ListCustomerProjectsInput = {
+  organizationId: string;
+  customerId: string;
+};
+
 export const createCustomer = async ({
   organizationId,
   actorId,
@@ -207,4 +226,159 @@ export const deleteCustomer = async ({
 
     return deletedCustomer;
   });
+};
+
+export const linkCustomerProject = async ({
+  organizationId,
+  actorId,
+  customerId,
+  projectId,
+}: LinkCustomerProjectInput) => {
+  const customer = await prisma.customer.findFirst({
+    where: {
+      id: customerId,
+      organizationId,
+    },
+  });
+
+  if (!customer) {
+    throw new Error('Customer not found');
+  }
+
+  const project = await prisma.project.findFirst({
+    where: {
+      id: projectId,
+      organizationId,
+    },
+  });
+
+  if (!project) {
+    throw new Error('Project not found');
+  }
+
+  return prisma.$transaction(async (tx) => {
+    const updatedCustomer = await tx.customer.update({
+      where: {
+        id: customer.id,
+      },
+      data: {
+        projects: {
+          connect: {
+            id: project.id,
+          },
+        },
+      },
+      include: {
+        projects: true,
+      },
+    });
+
+    await tx.auditLog.create({
+      data: {
+        organizationId,
+        actorId,
+        action: 'CUSTOMER_PROJECT_LINKED',
+        entityType: 'Customer',
+        entityId: customer.id,
+        metadata: {
+          customerId: customer.id,
+          projectId: project.id,
+          customerName: customer.name,
+          projectName: project.name,
+        },
+      },
+    });
+
+    return updatedCustomer;
+  });
+};
+
+export const unlinkCustomerProject = async ({
+  organizationId,
+  actorId,
+  customerId,
+  projectId,
+}: UnlinkCustomerProjectInput) => {
+  const customer = await prisma.customer.findFirst({
+    where: {
+      id: customerId,
+      organizationId,
+    },
+  });
+
+  if (!customer) {
+    throw new Error('Customer not found');
+  }
+
+  const project = await prisma.project.findFirst({
+    where: {
+      id: projectId,
+      organizationId,
+    },
+  });
+
+  if (!project) {
+    throw new Error('Project not found');
+  }
+
+  return prisma.$transaction(async (tx) => {
+    const updatedCustomer = await tx.customer.update({
+      where: {
+        id: customer.id,
+      },
+      data: {
+        projects: {
+          disconnect: {
+            id: project.id,
+          },
+        },
+      },
+    });
+
+    await tx.auditLog.create({
+      data: {
+        organizationId,
+        actorId,
+        action: 'CUSTOMER_PROJECT_UNLINKED',
+        entityType: 'Customer',
+        entityId: customer.id,
+        metadata: {
+          customerId: customer.id,
+          projectId: project.id,
+          customerName: customer.name,
+          projectName: project.name,
+        },
+      },
+    });
+
+    return updatedCustomer;
+  });
+};
+
+export const listCustomerProjects = async ({
+  organizationId,
+  customerId,
+}: ListCustomerProjectsInput) => {
+  const customer = await prisma.customer.findFirst({
+    where: {
+      id: customerId,
+      organizationId,
+    },
+    include: {
+      projects: {
+        where: {
+          organizationId,
+        },
+        orderBy: {
+          createdAt: 'desc',
+        },
+      },
+    },
+  });
+
+  if (!customer) {
+    throw new Error('Customer not found');
+  }
+
+  return customer.projects;
 };

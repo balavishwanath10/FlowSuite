@@ -9,7 +9,10 @@ import {
   createCustomer,
   deleteCustomer,
   getCustomerById,
+  linkCustomerProject,
+  listCustomerProjects,
   listOrganizationCustomers,
+  unlinkCustomerProject,
   updateCustomer,
 } from '../services/customer.service';
 
@@ -17,6 +20,11 @@ const router = Router();
 
 const customerIdParamSchema = z.object({
   customerId: z.string().uuid(),
+});
+
+const customerProjectParamsSchema = z.object({
+  customerId: z.string().uuid(),
+  projectId: z.string().uuid(),
 });
 
 const createCustomerSchema = z.object({
@@ -122,6 +130,57 @@ router.get(
   },
 );
 
+router.get(
+  '/:customerId/projects',
+  authenticate,
+  requireRole('OWNER', 'ADMIN', 'MANAGER'),
+  async (req: AuthenticatedRequest, res: Response) => {
+    const paramValidation = customerIdParamSchema.safeParse(req.params);
+
+    if (!paramValidation.success) {
+      return res.status(400).json({
+        code: 'VALIDATION_ERROR',
+        message: 'Invalid customer ID format',
+        errors: paramValidation.error.flatten(),
+      });
+    }
+
+    if (!req.user) {
+      return res.status(401).json({
+        code: 'AUTHENTICATION_REQUIRED',
+        message: 'Authentication required',
+      });
+    }
+
+    try {
+      const projects = await listCustomerProjects({
+        organizationId: req.user.organizationId,
+        customerId: paramValidation.data.customerId,
+      });
+
+      return res.status(200).json({
+        code: 'CUSTOMER_PROJECTS_RETRIEVED',
+        projects,
+      });
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : 'Unable to retrieve customer projects';
+
+      if (message === 'Customer not found') {
+        return res.status(404).json({
+          code: 'CUSTOMER_NOT_FOUND',
+          message,
+        });
+      }
+
+      return res.status(500).json({
+        code: 'CUSTOMER_PROJECTS_RETRIEVAL_FAILED',
+        message,
+      });
+    }
+  },
+);
+
 router.post(
   '/',
   authenticate,
@@ -164,6 +223,67 @@ router.post(
 
       return res.status(400).json({
         code: 'CUSTOMER_CREATION_FAILED',
+        message,
+      });
+    }
+  },
+);
+
+router.post(
+  '/:customerId/projects/:projectId',
+  authenticate,
+  requireRole('OWNER', 'ADMIN', 'MANAGER'),
+  async (req: AuthenticatedRequest, res: Response) => {
+    const paramValidation = customerProjectParamsSchema.safeParse(req.params);
+
+    if (!paramValidation.success) {
+      return res.status(400).json({
+        code: 'VALIDATION_ERROR',
+        message: 'Invalid customer or project ID format',
+        errors: paramValidation.error.flatten(),
+      });
+    }
+
+    if (!req.user) {
+      return res.status(401).json({
+        code: 'AUTHENTICATION_REQUIRED',
+        message: 'Authentication required',
+      });
+    }
+
+    try {
+      const customer = await linkCustomerProject({
+        organizationId: req.user.organizationId,
+        actorId: req.user.userId,
+        customerId: paramValidation.data.customerId,
+        projectId: paramValidation.data.projectId,
+      });
+
+      return res.status(200).json({
+        code: 'CUSTOMER_PROJECT_LINKED',
+        message: 'Project linked to customer successfully',
+        customer,
+      });
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : 'Unable to link project to customer';
+
+      if (message === 'Customer not found') {
+        return res.status(404).json({
+          code: 'CUSTOMER_NOT_FOUND',
+          message,
+        });
+      }
+
+      if (message === 'Project not found') {
+        return res.status(404).json({
+          code: 'PROJECT_NOT_FOUND',
+          message,
+        });
+      }
+
+      return res.status(400).json({
+        code: 'CUSTOMER_PROJECT_LINK_FAILED',
         message,
       });
     }
@@ -282,6 +402,66 @@ router.delete(
 
       return res.status(400).json({
         code: 'CUSTOMER_DELETION_FAILED',
+        message,
+      });
+    }
+  },
+);
+
+router.delete(
+  '/:customerId/projects/:projectId',
+  authenticate,
+  requireRole('OWNER', 'ADMIN', 'MANAGER'),
+  async (req: AuthenticatedRequest, res: Response) => {
+    const paramValidation = customerProjectParamsSchema.safeParse(req.params);
+
+    if (!paramValidation.success) {
+      return res.status(400).json({
+        code: 'VALIDATION_ERROR',
+        message: 'Invalid customer or project ID format',
+        errors: paramValidation.error.flatten(),
+      });
+    }
+
+    if (!req.user) {
+      return res.status(401).json({
+        code: 'AUTHENTICATION_REQUIRED',
+        message: 'Authentication required',
+      });
+    }
+
+    try {
+      await unlinkCustomerProject({
+        organizationId: req.user.organizationId,
+        actorId: req.user.userId,
+        customerId: paramValidation.data.customerId,
+        projectId: paramValidation.data.projectId,
+      });
+
+      return res.status(200).json({
+        code: 'CUSTOMER_PROJECT_UNLINKED',
+        message: 'Project unlinked from customer successfully',
+      });
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : 'Unable to unlink project from customer';
+
+      if (message === 'Customer not found') {
+        return res.status(404).json({
+          code: 'CUSTOMER_NOT_FOUND',
+          message,
+        });
+      }
+
+      if (message === 'Project not found') {
+        return res.status(404).json({
+          code: 'PROJECT_NOT_FOUND',
+          message,
+        });
+      }
+
+      return res.status(400).json({
+        code: 'CUSTOMER_PROJECT_UNLINK_FAILED',
         message,
       });
     }

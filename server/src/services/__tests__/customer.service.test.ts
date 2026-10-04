@@ -9,6 +9,9 @@ const { mockPrisma } = vi.hoisted(() => ({
       update: vi.fn(),
       delete: vi.fn(),
     },
+    project: {
+      findFirst: vi.fn(),
+    },
     auditLog: {
       create: vi.fn(),
     },
@@ -24,7 +27,10 @@ import {
   createCustomer,
   deleteCustomer,
   getCustomerById,
+  linkCustomerProject,
+  listCustomerProjects,
   listOrganizationCustomers,
+  unlinkCustomerProject,
   updateCustomer,
 } from '../customer.service';
 
@@ -325,6 +331,194 @@ describe('Customer Service', () => {
         deleteCustomer({
           organizationId: 'org-a',
           actorId: 'user-a',
+          customerId: 'org-b-cust',
+        }),
+      ).rejects.toThrow('Customer not found');
+    });
+  });
+
+  describe('linkCustomerProject', () => {
+    it('links a project to a customer and writes CUSTOMER_PROJECT_LINKED audit log transactionally', async () => {
+      const mockCustomer = { id: 'cust-1', organizationId: 'org-1', name: 'Acme Corp' };
+      const mockProject = { id: 'proj-1', organizationId: 'org-1', name: 'Website Redesign' };
+      const updatedCustomer = {
+        ...mockCustomer,
+        projects: [mockProject],
+      };
+
+      mockPrisma.customer.findFirst.mockResolvedValue(mockCustomer);
+      mockPrisma.project.findFirst.mockResolvedValue(mockProject);
+      mockPrisma.customer.update.mockResolvedValue(updatedCustomer);
+      mockPrisma.auditLog.create.mockResolvedValue({ id: 'audit-4' });
+      mockPrisma.$transaction.mockImplementation(async (cb) => cb(mockPrisma));
+
+      const result = await linkCustomerProject({
+        organizationId: 'org-1',
+        actorId: 'user-1',
+        customerId: 'cust-1',
+        projectId: 'proj-1',
+      });
+
+      expect(mockPrisma.customer.findFirst).toHaveBeenCalledWith({
+        where: { id: 'cust-1', organizationId: 'org-1' },
+      });
+      expect(mockPrisma.project.findFirst).toHaveBeenCalledWith({
+        where: { id: 'proj-1', organizationId: 'org-1' },
+      });
+      expect(mockPrisma.customer.update).toHaveBeenCalledWith({
+        where: { id: 'cust-1' },
+        data: {
+          projects: {
+            connect: { id: 'proj-1' },
+          },
+        },
+        include: {
+          projects: true,
+        },
+      });
+      expect(mockPrisma.auditLog.create).toHaveBeenCalledWith({
+        data: {
+          organizationId: 'org-1',
+          actorId: 'user-1',
+          action: 'CUSTOMER_PROJECT_LINKED',
+          entityType: 'Customer',
+          entityId: 'cust-1',
+          metadata: {
+            customerId: 'cust-1',
+            projectId: 'proj-1',
+            customerName: 'Acme Corp',
+            projectName: 'Website Redesign',
+          },
+        },
+      });
+      expect(result).toBe(updatedCustomer);
+    });
+
+    it('explicit cross-tenant isolation: rejects link if customer belongs to Org B', async () => {
+      mockPrisma.customer.findFirst.mockResolvedValue(null);
+
+      await expect(
+        linkCustomerProject({
+          organizationId: 'org-a',
+          actorId: 'user-a',
+          customerId: 'org-b-cust',
+          projectId: 'proj-a',
+        }),
+      ).rejects.toThrow('Customer not found');
+    });
+
+    it('explicit cross-tenant isolation: rejects link if project belongs to Org B', async () => {
+      const mockCustomer = { id: 'cust-a', organizationId: 'org-a', name: 'Org A Corp' };
+      mockPrisma.customer.findFirst.mockResolvedValue(mockCustomer);
+      mockPrisma.project.findFirst.mockResolvedValue(null);
+
+      await expect(
+        linkCustomerProject({
+          organizationId: 'org-a',
+          actorId: 'user-a',
+          customerId: 'cust-a',
+          projectId: 'org-b-proj',
+        }),
+      ).rejects.toThrow('Project not found');
+    });
+  });
+
+  describe('unlinkCustomerProject', () => {
+    it('unlinks a project from a customer and writes CUSTOMER_PROJECT_UNLINKED audit log transactionally', async () => {
+      const mockCustomer = { id: 'cust-1', organizationId: 'org-1', name: 'Acme Corp' };
+      const mockProject = { id: 'proj-1', organizationId: 'org-1', name: 'Website Redesign' };
+      const updatedCustomer = { ...mockCustomer, projects: [] };
+
+      mockPrisma.customer.findFirst.mockResolvedValue(mockCustomer);
+      mockPrisma.project.findFirst.mockResolvedValue(mockProject);
+      mockPrisma.customer.update.mockResolvedValue(updatedCustomer);
+      mockPrisma.auditLog.create.mockResolvedValue({ id: 'audit-5' });
+      mockPrisma.$transaction.mockImplementation(async (cb) => cb(mockPrisma));
+
+      const result = await unlinkCustomerProject({
+        organizationId: 'org-1',
+        actorId: 'user-1',
+        customerId: 'cust-1',
+        projectId: 'proj-1',
+      });
+
+      expect(mockPrisma.customer.update).toHaveBeenCalledWith({
+        where: { id: 'cust-1' },
+        data: {
+          projects: {
+            disconnect: { id: 'proj-1' },
+          },
+        },
+      });
+      expect(mockPrisma.auditLog.create).toHaveBeenCalledWith({
+        data: {
+          organizationId: 'org-1',
+          actorId: 'user-1',
+          action: 'CUSTOMER_PROJECT_UNLINKED',
+          entityType: 'Customer',
+          entityId: 'cust-1',
+          metadata: {
+            customerId: 'cust-1',
+            projectId: 'proj-1',
+            customerName: 'Acme Corp',
+            projectName: 'Website Redesign',
+          },
+        },
+      });
+      expect(result).toBe(updatedCustomer);
+    });
+
+    it('explicit cross-tenant isolation: rejects unlink if customer or project is from Org B', async () => {
+      mockPrisma.customer.findFirst.mockResolvedValue(null);
+
+      await expect(
+        unlinkCustomerProject({
+          organizationId: 'org-a',
+          actorId: 'user-a',
+          customerId: 'org-b-cust',
+          projectId: 'proj-a',
+        }),
+      ).rejects.toThrow('Customer not found');
+    });
+  });
+
+  describe('listCustomerProjects', () => {
+    it('lists projects linked to a customer scoped strictly by organizationId', async () => {
+      const mockProjects = [
+        { id: 'proj-1', organizationId: 'org-1', name: 'Website Redesign' },
+      ];
+      const mockCustomer = {
+        id: 'cust-1',
+        organizationId: 'org-1',
+        name: 'Acme Corp',
+        projects: mockProjects,
+      };
+
+      mockPrisma.customer.findFirst.mockResolvedValue(mockCustomer);
+
+      const result = await listCustomerProjects({
+        organizationId: 'org-1',
+        customerId: 'cust-1',
+      });
+
+      expect(mockPrisma.customer.findFirst).toHaveBeenCalledWith({
+        where: { id: 'cust-1', organizationId: 'org-1' },
+        include: {
+          projects: {
+            where: { organizationId: 'org-1' },
+            orderBy: { createdAt: 'desc' },
+          },
+        },
+      });
+      expect(result).toBe(mockProjects);
+    });
+
+    it('explicit cross-tenant isolation: rejects list request if customer belongs to Org B', async () => {
+      mockPrisma.customer.findFirst.mockResolvedValue(null);
+
+      await expect(
+        listCustomerProjects({
+          organizationId: 'org-a',
           customerId: 'org-b-cust',
         }),
       ).rejects.toThrow('Customer not found');
