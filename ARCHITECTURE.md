@@ -74,6 +74,26 @@ Authenticated Request → JWT Middleware → RBAC Middleware → Customer Route 
 
 Customer operations resolve tenant ownership directly via `customer.organizationId = req.user.organizationId`. Customer records use the existing Day 2 Prisma `Customer` model and retain relationships with `Organization` and `Project` without requiring schema modifications.
 
+### Customer ↔ Project Association Flow
+
+Customer-Project association operations follow the standard processing pipeline:
+
+```text
+Authenticated Request → JWT Middleware → RBAC Middleware → Customer Route → Customer Service → Prisma / PostgreSQL
+```
+
+Association request handlers validate that both the target `Customer` and `Project` records belong to the authenticated user's `organizationId` (`customer.organizationId = organizationId AND project.organizationId = organizationId`). Mutations execute inside `prisma.$transaction` atomically alongside `CUSTOMER_PROJECT_LINKED` or `CUSTOMER_PROJECT_UNLINKED` audit log entries. Uses the existing Day 2 implicit many-to-many relationship (`Customer.projects <-> Project.customers`) without schema modifications.
+
+### Audit Log Retrieval Flow
+
+Audit log query operations follow a read-only processing pipeline:
+
+```text
+Authenticated Request → JWT Middleware → RBAC Middleware (OWNER/ADMIN) → Audit Log Route → Audit Log Service → Prisma / PostgreSQL
+```
+
+Audit log retrieval derives tenant scoping exclusively from `req.user.organizationId`. Queries compute total count and paginated result set (`createdAt DESC`) in parallel, applying optional `action` and `actorId` filters while selecting explicit actor fields (`id`, `name`, `email`).
+
 ## 4. Multi-Tenant Data Isolation
 
 FlowSuite enforces strict organization-level data isolation at the backend service layer:
@@ -85,6 +105,7 @@ FlowSuite enforces strict organization-level data isolation at the backend servi
   - **Member Project Visibility**: `MEMBER → only projects containing tasks assigned to authenticated user` (`tasks.some.assigneeId = userId`).
   - **Member Task Visibility**: `MEMBER → only tasks where assigneeId = authenticated userId` (`assigneeId = userId`).
   - **Customer Access Denial**: `MEMBER → no customer operations permitted` (returns HTTP 403 `INSUFFICIENT_ROLE`).
+  - **Audit Log Access Denial**: `MANAGER` and `MEMBER → no audit log access permitted` (returns HTTP 403 `INSUFFICIENT_ROLE`).
 
 ## 5. Server-Side Role-Based Access Control (RBAC)
 
@@ -99,6 +120,20 @@ FlowSuite implements a four-tier server-side RBAC authorization model (`OWNER`, 
 | **Create Customer** | Yes | Yes | Yes | No |
 | **Update Customer** | Yes | Yes | Yes | No |
 | **Delete Customer** | Yes | Yes | Yes | No |
+
+### Customer ↔ Project Association Permissions
+
+| Operation | OWNER | ADMIN | MANAGER | MEMBER |
+| :--- | :---: | :---: | :---: | :---: |
+| **Link Customer to Project** | Yes | Yes | Yes | No |
+| **Unlink Customer from Project** | Yes | Yes | Yes | No |
+| **List Customer Projects** | Yes | Yes | Yes | No |
+
+### Audit Log Retrieval Permissions
+
+| Operation | OWNER | ADMIN | MANAGER | MEMBER |
+| :--- | :---: | :---: | :---: | :---: |
+| **List Audit Logs** | Yes | Yes | No | No |
 
 ### Task Management Permissions
 
@@ -127,6 +162,7 @@ Key system and domain mutations execute within atomic database transactions (`pr
 
 Implemented audit actions:
 - **Customers**: `CUSTOMER_CREATED`, `CUSTOMER_UPDATED`, `CUSTOMER_DELETED`.
+- **Customer Associations**: `CUSTOMER_PROJECT_LINKED`, `CUSTOMER_PROJECT_UNLINKED`.
 - **Tasks**: `TASK_CREATED`, `TASK_UPDATED`, `TASK_ASSIGNED`, `TASK_STATUS_UPDATED`.
 - **Memberships**: `MEMBER_INVITED`, `INVITATION_ACCEPTED`, `MEMBER_ROLE_UPDATED`, `MEMBER_REMOVED`.
 - **Projects**: `PROJECT_CREATED`, `PROJECT_UPDATED`, `PROJECT_ARCHIVED`.
@@ -135,10 +171,11 @@ Implemented audit actions:
 
 The backend test suite is built with Vitest and focuses on service-level unit tests and RBAC middleware validation:
 
-- **98 automated tests passing across 10 test suites.**
-- **Service Unit Tests**: Cover authentication, registration, login, refresh, password reset, membership/invitations, project CRUD, task CRUD, assignment validation, and customer CRUD. Service tests mock Prisma database calls.
-- **RBAC & Visibility Tests**: Test exact role permission boundaries for `OWNER`, `ADMIN`, `MANAGER`, and `MEMBER`, including Member project and task visibility scoping and total Member denial on Customer routes.
-- **Tenant Isolation Tests**: Explicit cross-tenant isolation tests asserting that queries attempting to access Organization B resources from Organization A context return 404.
+- **114 automated tests passing across 11 test suites.**
+- **Service Unit Tests**: Cover authentication, registration, login, refresh, password reset, membership/invitations, project CRUD, task CRUD, assignment validation, customer CRUD, customer-project associations (`linkCustomerProject`, `unlinkCustomerProject`, `listCustomerProjects`), and audit log retrieval (`listOrganizationAuditLogs`). Service tests mock Prisma database calls.
+- **RBAC & Visibility Tests**: Test exact role permission boundaries for `OWNER`, `ADMIN`, `MANAGER`, and `MEMBER`, including Member project and task visibility scoping, total Member denial on Customer routes, and `OWNER`/`ADMIN`-only access on Audit Log retrieval endpoints.
+- **Tenant Isolation Tests**: Explicit cross-tenant isolation tests asserting that queries attempting to access Organization B resources from Organization A context return 404 (or empty result set for audit log retrieval).
+- **Key Codebase Additions**: Added `audit-log.service.ts`, `audit-log.routes.ts`, and `audit-log.service.test.ts`.
 - **Build Status**: Verified clean compilation via `npm run build` (`tsc`).
 
 Note: Current testing consists of service-level unit tests with mocked Prisma, alongside isolated RBAC middleware unit tests. No HTTP end-to-end integration tests or live PostgreSQL integration tests are included in the test suite.

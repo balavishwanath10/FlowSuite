@@ -4,9 +4,9 @@
 
 FlowSuite is a production-style B2B SaaS platform designed to provide organizations with isolated workspaces for managing teams, customers, projects, and tasks — backed by role-based access control (RBAC), subscription billing, a flexible feature-entitlement engine, usage limits, and audit logging.
 
-## Current Status — Day 7 Customer Management Backend Foundation
+## Current Status — Day 9 Organization Audit Log Retrieval
 
-The repository currently contains the completed **Day 1 foundation, Day 2 database schema, Day 3 authentication, Day 4 organization membership & RBAC, Day 5 project management, Day 6 task management, and Day 7 customer management**.
+The repository currently contains the completed **Day 1 foundation, Day 2 database schema, Day 3 authentication, Day 4 organization membership & RBAC, Day 5 project management, Day 6 task management, Day 7 customer management, Day 8 customer ↔ project association, and Day 9 organization audit log retrieval**.
 
 ### Day 1 — Foundation
 
@@ -89,8 +89,35 @@ The repository currently contains the completed **Day 1 foundation, Day 2 databa
 * TypeScript backend build verified successfully (`npm run build`).
 * No Prisma schema modifications or migrations were required.
 
+### Day 8 — Customer ↔ Project Association
+
+* Customer ↔ Project association endpoints (`POST /api/v1/customers/:customerId/projects/:projectId`, `DELETE /api/v1/customers/:customerId/projects/:projectId`, `GET /api/v1/customers/:customerId/projects`).
+* Uses existing Prisma implicit many-to-many relationship (`Customer.projects Project[]` / `Project.customers Customer[]`).
+* Organization/tenant isolation: Both customer and project validated against `req.user.organizationId`. Cross-tenant requests return generic 404 (`CUSTOMER_NOT_FOUND` / `PROJECT_NOT_FOUND`).
+* Server-side RBAC enforcement:
+  * `OWNER`, `ADMIN`, `MANAGER`: Can link/unlink projects and customers and list customer project associations.
+  * `MEMBER`: Denied access to customer-project operations (returns HTTP 403 `INSUFFICIENT_ROLE`).
+* Transactional audit log actions (`CUSTOMER_PROJECT_LINKED`, `CUSTOMER_PROJECT_UNLINKED`) via `prisma.$transaction`.
+* No database migration or Prisma schema change was required.
+
+### Day 9 — Organization Audit Log Retrieval
+
+* Read-only organization audit log retrieval endpoint (`GET /api/v1/audit-logs`).
+* Server-side RBAC enforcement:
+  * `OWNER`, `ADMIN`: Permitted to retrieve organization audit logs.
+  * `MANAGER`, `MEMBER`: Denied access (returns HTTP 403 `INSUFFICIENT_ROLE`).
+* Multi-tenant data isolation: All queries strictly scoped by `req.user.organizationId`. Client-supplied organization IDs are not accepted or used for tenant selection.
+* Bounded server-side pagination: Default `page = 1`, default `limit = 20`, maximum `limit = 100`. Returns pagination metadata (`page`, `limit`, `total`, `totalPages`).
+* Filtering & Ordering: Ordered newest first by `createdAt` (`createdAt DESC`). Supports optional filtering by `action` and `actorId` (combinable).
+* Actor payload selection: Returns limited actor profile data (`id`, `name`, `email`).
+* Input validation: Zod schema query validation returning HTTP 400 `VALIDATION_ERROR` for invalid parameters (e.g. non-positive page numbers, out-of-bound limits, non-UUID actor IDs).
+* Codebase additions: `audit-log.service.ts`, `audit-log.routes.ts`, `audit-log.service.test.ts`, expanded RBAC test coverage, and router registration in `src/index.ts`.
+* **114 automated Vitest unit tests passing across 11 test suites.**
+* TypeScript backend build verified cleanly (`npm run build`).
+* No database migration or Prisma schema change was required.
+
 > [!IMPORTANT]
-> **Planned vs. Implemented Functionality:** Authentication, JWT, RBAC, organization membership, Project Management, Task Management, and Customer Management backend foundations are now implemented and tested. Subscription upgrades/billing, usage enforcement, and remaining business-domain functionality are planned according to the FlowSuite PRD and will be implemented in their scheduled phases.
+> **Planned vs. Implemented Functionality:** Authentication, JWT, RBAC, organization membership, Project Management, Task Management, Customer Management, Customer-Project associations, and Organization Audit Log retrieval are now implemented and tested. Subscription upgrades/billing, usage enforcement, and remaining business-domain functionality are planned according to the FlowSuite PRD and will be implemented in their scheduled phases.
 
 ## Tech Stack
 
@@ -224,6 +251,15 @@ http://localhost:5173
 | POST | `/api/v1/customers` | OWNER, ADMIN, MANAGER | Create a new customer |
 | PATCH | `/api/v1/customers/:customerId` | OWNER, ADMIN, MANAGER | Update customer details |
 | DELETE | `/api/v1/customers/:customerId` | OWNER, ADMIN, MANAGER | Delete a customer |
+| POST | `/api/v1/customers/:customerId/projects/:projectId` | OWNER, ADMIN, MANAGER | Link a project to a customer |
+| DELETE | `/api/v1/customers/:customerId/projects/:projectId` | OWNER, ADMIN, MANAGER | Unlink a project from a customer |
+| GET | `/api/v1/customers/:customerId/projects` | OWNER, ADMIN, MANAGER | List projects associated with a customer |
+
+### Audit Log Management
+
+| Method | Endpoint | Permitted Roles | Purpose |
+| ------ | -------- | --------------- | ------- |
+| GET | `/api/v1/audit-logs` | OWNER, ADMIN | Retrieve organization audit logs with pagination & filtering |
 
 ## Testing
 
@@ -255,11 +291,13 @@ Current test coverage includes:
 * Task RBAC permissions & Member task visibility scoping directly in Prisma queries.
 * Customer CRUD operations (create, read/list, get by ID, update, delete).
 * Customer RBAC permissions (`OWNER`/`ADMIN`/`MANAGER` full CRUD; `MEMBER` total denial).
-* Cross-tenant isolation verification across membership, project, task, and customer domains.
+* Customer ↔ Project association (linking, unlinking, and listing customer projects).
+* Organization audit log retrieval (pagination, action/actor filtering, and RBAC guards).
+* Cross-tenant isolation verification across membership, project, task, customer, and audit log domains.
 
 Note: Current tests consist of service-level unit tests with mocked Prisma, alongside isolated RBAC middleware unit tests. No HTTP end-to-end integration tests or live PostgreSQL integration tests are involved.
 
-**Current result: 98 automated tests passing across 10 test suites.**
+**Current result: 114 automated tests passing across 11 test suites.**
 **Build status: `npm run build` passing cleanly.**
 
 ## Database
@@ -360,6 +398,30 @@ npx prisma studio
 * Zod validation for body inputs and customer ID route parameters.
 * Comprehensive customer service and RBAC middleware unit tests.
 * **98 automated tests passing across 10 test suites.**
+* Backend build verified (`npm run build`).
+* No schema changes or migrations required.
+
+#### Day 8 — Customer ↔ Project Association
+
+* Customer-Project association endpoints implemented (`/api/v1/customers/:customerId/projects/:projectId`, `/api/v1/customers/:customerId/projects`).
+* Uses existing Day 2 implicit many-to-many database relationship (`Customer.projects <-> Project.customers`).
+* Dual-entity organization/tenant isolation (both Customer and Project must belong to `organizationId`).
+* RBAC guards: `OWNER`, `ADMIN`, `MANAGER` allowed, `MEMBER` denied with 403 `INSUFFICIENT_ROLE`.
+* Transactional audit logs (`CUSTOMER_PROJECT_LINKED`, `CUSTOMER_PROJECT_UNLINKED`).
+* Comprehensive service unit tests covering link, unlink, project listing, and cross-tenant rejections.
+* No Prisma schema modifications or migrations required.
+
+#### Day 9 — Organization Audit Log Retrieval
+
+* Read-only organization audit-log API (`GET /api/v1/audit-logs`).
+* Organization isolation strictly scoped to `req.user.organizationId`. Client-supplied tenant IDs are not accepted or used for tenant selection.
+* Server-side RBAC: `OWNER` and `ADMIN` allowed; `MANAGER` and `MEMBER` denied (HTTP 403 `INSUFFICIENT_ROLE`).
+* Bounded server-side pagination (`page`, `limit`, `total`, `totalPages`) with newest-first ordering (`createdAt: 'desc'`).
+* Optional query filtering by `action` and `actorId` (combinable).
+* Explicit actor profile payload selection (`id`, `name`, `email`).
+* Zod query parameter validation (`400 VALIDATION_ERROR` on invalid params).
+* Added `audit-log.service.ts`, `audit-log.routes.ts`, `audit-log.service.test.ts`, expanded RBAC test coverage, and router registration in `src/index.ts`.
+* **114 automated tests passing across 11 test suites.**
 * Backend build verified (`npm run build`).
 * No schema changes or migrations required.
 

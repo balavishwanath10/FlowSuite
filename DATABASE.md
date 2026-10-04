@@ -72,7 +72,41 @@ This prevents cross-tenant customer retrieval, updates, or deletions. Attempts t
 
 ### AuditLog Integration
 
-Customer mutations (`CUSTOMER_CREATED`, `CUSTOMER_UPDATED`, `CUSTOMER_DELETED`) execute within Prisma transactions (`prisma.$transaction`) to atomically write an entry to the `AuditLog` table with `organizationId` and `actorId`.
+Customer mutations (`CUSTOMER_CREATED`, `CUSTOMER_UPDATED`, `CUSTOMER_DELETED`) and customer-project association mutations (`CUSTOMER_PROJECT_LINKED`, `CUSTOMER_PROJECT_UNLINKED`) execute within Prisma transactions (`prisma.$transaction`) to atomically write an entry to the `AuditLog` table with `organizationId` and `actorId`.
+
+## AuditLog Data Model & Retrieval
+
+### Entity Schema
+
+The `AuditLog` model stores persistent organization audit records:
+* `id` — UUID primary key.
+* `organizationId` — foreign key referencing `Organization.id`.
+* `actorId` — optional foreign key referencing `User.id`.
+* `action` — string action descriptor.
+* `entityType` / `entityId` / `metadata` — optional entity context and JSON payload.
+* `createdAt` — timestamp.
+
+### Query Isolation & Filtering (Day 9)
+
+Audit log retrieval (`GET /api/v1/audit-logs`) is a read-only capability over the existing `AuditLog` model.
+
+All audit log queries enforce explicit organization scoping:
+```text
+auditLog.organizationId = authenticated organizationId
+```
+
+Optional query filters supported:
+* `action = requested action`
+* `actorId = requested actorId`
+
+Ordering: `createdAt DESC`.
+Pagination: Implemented via Prisma `skip` and `take` based on validated `page` and `limit`.
+
+Actor Payload Selection:
+Audit log queries explicitly select non-sensitive actor fields:
+* `actor.id`
+* `actor.name`
+* `actor.email`
 
 ## Task Data Model & Relationships
 
@@ -148,3 +182,5 @@ Indexes defined in the Prisma schema include:
 
 * **Initial Migration**: `20261002043238_init` introduced all ten core models.
 * **Day 7 Status**: Day 7 required **no database schema changes or migrations**, as the existing `Customer`, `Project`, `Organization`, and `AuditLog` models introduced in the Day 2 baseline fully satisfied all Day 7 PRD requirements. No new tables, columns, indexes, constraints, status/archive fields, or relationships were added.
+* **Day 8 Status**: Day 8 required **no database schema changes or migrations**, as the existing implicit `Customer.projects <-> Project.customers` relationship introduced in the Day 2 baseline fully satisfied all Day 8 requirements.
+* **Day 9 Status**: Day 9 required **no database schema changes or migrations**, as it provides a read/retrieval capability over the existing `AuditLog` model introduced in Day 2.
