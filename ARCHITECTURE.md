@@ -94,6 +94,26 @@ Authenticated Request → JWT Middleware → RBAC Middleware (OWNER/ADMIN) → A
 
 Audit log retrieval derives tenant scoping exclusively from `req.user.organizationId`. Queries compute total count and paginated result set (`createdAt DESC`) in parallel, applying optional `action` and `actorId` filters while selecting explicit actor fields (`id`, `name`, `email`).
 
+### Subscription Entitlement Flow
+
+Subscription retrieval operations follow a read-only entitlement pipeline:
+
+```text
+Authenticated Request → JWT Middleware → RBAC Middleware (OWNER/ADMIN) → Subscription Route → Subscription Service → Prisma / PostgreSQL
+```
+
+Retrieves the organization subscription and associated plan record (`Plan`). Multi-tenant isolation is strictly enforced via `req.user.organizationId`. Returns plan entitlements (seat limits, project limits, API request limits, advanced analytics) without exposing internal Stripe customer/subscription identifiers.
+
+### API Usage Tracking & Limit Enforcement Flow
+
+API request counting and usage enforcement follow an inline pipeline on protected business API routes:
+
+```text
+Authenticated Request → JWT Middleware → API Usage Enforcement Middleware → RBAC Middleware → Route Handler → Service Layer → Prisma / PostgreSQL
+```
+
+The `enforceApiUsageLimit` middleware checks whether the authenticated organization's API usage for the current billing period (`UsageCounter.apiRequests`) is within the plan limit (`Plan.apiRequestLimit`). Expired usage periods are lazily initialized/rolled over. Atomic conditional database updates (`apiRequests < apiRequestLimit`) guarantee limit enforcement under concurrent requests. If the organization limit is exhausted, requests return HTTP 429 (`API_USAGE_LIMIT_EXCEEDED`). Excluded routes: `/health`, `/api/v1/auth/*`, `POST /api/v1/memberships/accept-invite`, `GET /api/v1/usage`, and `POST /api/v1/billing/webhook`.
+
 ### Stripe Test-Mode Billing Flows
 
 #### 1. Checkout Session Flow
@@ -168,13 +188,22 @@ FlowSuite implements a four-tier server-side RBAC authorization model (`OWNER`, 
 | **Archive Project** | Yes | Yes | Yes | No |
 | **View Organization Projects** | Yes | Yes | Yes | Assigned-Task Projects Only |
 
+### Subscription & Entitlement Permissions
+
+| Operation | OWNER | ADMIN | MANAGER | MEMBER |
+| :--- | :---: | :---: | :---: | :---: |
+| **Get Subscription & Plan Entitlements** | Yes | Yes | No | No |
+| **Get API Request Usage Status** | Yes | Yes | No | No |
+| **Create Stripe Checkout Session** | Yes | No | No | No |
+
 Permissions are strictly enforced on the server side via `requireRole` middleware and service-level role verification.
 
 ## 6. Audit Logging
 
-Key system and domain mutations execute within atomic database transactions (`prisma.$transaction`) alongside an `AuditLog` creation step. This guarantees that an audit log entry is persisted whenever a mutation succeeds, and rolled back if the mutation fails.
+Key system and domain mutations execute within atomic database transactions (`prisma.$transaction`) or verified webhook event handlers alongside an `AuditLog` creation step. This guarantees that an audit log entry is persisted whenever a mutation succeeds, and rolled back if the mutation fails.
 
 Implemented audit actions:
+- **Subscriptions / Billing**: `SUBSCRIPTION_PLAN_CHANGED`.
 - **Customers**: `CUSTOMER_CREATED`, `CUSTOMER_UPDATED`, `CUSTOMER_DELETED`.
 - **Customer Associations**: `CUSTOMER_PROJECT_LINKED`, `CUSTOMER_PROJECT_UNLINKED`.
 - **Tasks**: `TASK_CREATED`, `TASK_UPDATED`, `TASK_ASSIGNED`, `TASK_STATUS_UPDATED`.
@@ -183,13 +212,12 @@ Implemented audit actions:
 
 ## 7. Testing & Verification Architecture
 
-The backend test suite is built with Vitest and focuses on service-level unit tests and RBAC middleware validation:
+The backend test suite is built with Vitest and focuses on service-level unit tests, middleware validation, and route handler testing:
 
-- **114 automated tests passing across 11 test suites.**
-- **Service Unit Tests**: Cover authentication, registration, login, refresh, password reset, membership/invitations, project CRUD, task CRUD, assignment validation, customer CRUD, customer-project associations (`linkCustomerProject`, `unlinkCustomerProject`, `listCustomerProjects`), and audit log retrieval (`listOrganizationAuditLogs`). Service tests mock Prisma database calls.
-- **RBAC & Visibility Tests**: Test exact role permission boundaries for `OWNER`, `ADMIN`, `MANAGER`, and `MEMBER`, including Member project and task visibility scoping, total Member denial on Customer routes, and `OWNER`/`ADMIN`-only access on Audit Log retrieval endpoints.
-- **Tenant Isolation Tests**: Explicit cross-tenant isolation tests asserting that queries attempting to access Organization B resources from Organization A context return 404 (or empty result set for audit log retrieval).
-- **Key Codebase Additions**: Added `audit-log.service.ts`, `audit-log.routes.ts`, and `audit-log.service.test.ts`.
+- **176 automated tests passing across 16 test suites.**
+- **Service Unit Tests**: Cover authentication, registration, login, refresh, password reset, membership/invitations, project CRUD, task CRUD, assignment validation, customer CRUD, customer-project associations, audit log retrieval, subscription entitlements, API usage tracking, and Stripe test-mode billing service (`stripe.service.ts`).
+- **RBAC & Visibility Tests**: Test exact role permission boundaries for `OWNER`, `ADMIN`, `MANAGER`, and `MEMBER`, including Member project and task visibility scoping, total Member denial on Customer routes, `OWNER`/`ADMIN`-only access on Audit Log/Subscription/Usage endpoints, and `OWNER`-only access on Billing checkout endpoints.
+- **Tenant Isolation Tests**: Explicit cross-tenant isolation tests asserting that queries attempting to access Organization B resources from Organization A context return 404 (or empty result set for audit log retrieval) and reject untrusted client tenant inputs.
 - **Build Status**: Verified clean compilation via `npm run build` (`tsc`).
 
-Note: Current testing consists of service-level unit tests with mocked Prisma, alongside isolated RBAC middleware unit tests. No HTTP end-to-end integration tests or live PostgreSQL integration tests are included in the test suite.
+Note: Current testing consists of service-level unit tests with mocked Prisma and Stripe SDK, alongside isolated middleware and route unit tests. No HTTP end-to-end integration tests or live PostgreSQL/Stripe integration tests are included in the test suite.

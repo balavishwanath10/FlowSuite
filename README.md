@@ -4,9 +4,9 @@
 
 FlowSuite is a production-style B2B SaaS platform designed to provide organizations with isolated workspaces for managing teams, customers, projects, and tasks — backed by role-based access control (RBAC), subscription billing, a flexible feature-entitlement engine, usage limits, and audit logging.
 
-## Current Status — Day 9 Organization Audit Log Retrieval
+## Current Status — Day 12 Stripe Test-Mode Billing Foundation
 
-The repository currently contains the completed **Day 1 foundation, Day 2 database schema, Day 3 authentication, Day 4 organization membership & RBAC, Day 5 project management, Day 6 task management, Day 7 customer management, Day 8 customer ↔ project association, and Day 9 organization audit log retrieval**.
+The repository currently contains the completed **Day 1 foundation, Day 2 database schema, Day 3 authentication, Day 4 organization membership & RBAC, Day 5 project management, Day 6 task management, Day 7 customer management, Day 8 customer ↔ project association, Day 9 organization audit log retrieval, Day 10 subscription & plan entitlement foundation, Day 11 API usage tracking & limits, and Day 12 Stripe test-mode billing foundation**.
 
 ### Day 1 — Foundation
 
@@ -113,26 +113,52 @@ The repository currently contains the completed **Day 1 foundation, Day 2 databa
 * Input validation: Zod schema query validation returning HTTP 400 `VALIDATION_ERROR` for invalid parameters (e.g. non-positive page numbers, out-of-bound limits, non-UUID actor IDs).
 * Codebase additions: `audit-log.service.ts`, `audit-log.routes.ts`, `audit-log.service.test.ts`, expanded RBAC test coverage, and router registration in `src/index.ts`.
 
+### Day 10 — Subscription & Plan Entitlement Foundation
+
+* Organization subscription retrieval endpoint (`GET /api/v1/subscription`).
+* Server-side RBAC enforcement:
+  * `OWNER`, `ADMIN`: Permitted to view organization subscription details and plan entitlements.
+  * `MANAGER`, `MEMBER`: Denied access (returns HTTP 403 `INSUFFICIENT_ROLE`).
+* Tenant isolation: Scoped strictly by `req.user.organizationId`. Client-supplied tenant IDs are not accepted or used for tenant selection.
+* Plan entitlements (Free, Starter, Professional):
+  * **Free** (₹0 / 0 paise): 3 seats, 2 projects, 1,000 API requests, Advanced Analytics: No.
+  * **Starter** (₹499 / 49,900 paise): 10 seats, 20 projects, 10,000 API requests, Advanced Analytics: No.
+  * **Professional** (₹999 / 99,900 paise): 50 seats, Unlimited projects (`null`), 100,000 API requests, Advanced Analytics: Yes.
+* Safe subscription payload: Returns plan entitlement limits without exposing internal Stripe identifiers.
+* **132 automated Vitest tests passing across 12 test suites.**
+* TypeScript backend build verified cleanly (`npm run build`). No database schema changes or migrations required.
+
+### Day 11 — API Usage Tracking & Limits
+
+* Organization API usage retrieval endpoint (`GET /api/v1/usage`).
+* Server-side RBAC enforcement: `OWNER` and `ADMIN` permitted; `MANAGER` and `MEMBER` denied (HTTP 403 `INSUFFICIENT_ROLE`).
+* Tenant isolation: Derived strictly from `req.user.organizationId`. Client-supplied organization IDs are not accepted or used for tenant selection.
+* Route middleware ordering: `authenticate → enforceApiUsageLimit → requireRole → handler`.
+* Exclusions: `/health`, `/api/v1/auth/*`, `POST /api/v1/memberships/accept-invite`, and `GET /api/v1/usage` are excluded from API request counting.
+* Usage tracking & limit enforcement: Tracked per organization using `UsageCounter`. Usage periods automatically roll over when `periodEnd` expires. Atomic conditional database updates (`apiRequests < apiRequestLimit`) enforce limit boundaries. Requests exceeding the limit return HTTP 429 (`API_USAGE_LIMIT_EXCEEDED`).
+* **148 automated Vitest tests passing across 14 test suites.**
+* Backend build (`npm run build`) and `git diff --check` verified cleanly. No database schema changes or migrations required.
+
 ### Day 12 — Stripe Test-Mode Billing Foundation
 
 * **Stripe Test-Mode Integration**: Integrated official Stripe Node SDK (`stripe`) for test-mode checkout sessions and webhook processing.
 * **Checkout Session Endpoint (`POST /api/v1/billing/checkout`)**:
-  * Allows authenticated `OWNER` users to initiate test-mode Stripe Checkout sessions for paid plans (`Starter`, `Professional`).
+  * Allows authenticated `OWNER` users to initiate test-mode Stripe Checkout sessions for paid plans (`Starter`, `Professional`). Pipeline: `authenticate → enforceApiUsageLimit → requireRole('OWNER')`.
   * Server resolves requested plan from `Plan` DB table and maps to configured Stripe price IDs (`STRIPE_STARTER_PRICE_ID`, `STRIPE_PROFESSIONAL_PRICE_ID`). Client-supplied prices/amounts are strictly ignored.
   * Free plan cannot be purchased via checkout (returns HTTP 400 `FREE_PLAN_CANNOT_BE_PURCHASED`).
-  * Tenant isolation: `req.user.organizationId` used exclusively. Client-supplied organization IDs are rejected/ignored.
+  * Tenant isolation: `req.user.organizationId` used exclusively. Client-supplied organization IDs are not accepted or used for tenant selection.
   * Generates/reuses Stripe customer ID (`Subscription.stripeCustomerId`) stored on subscription record.
-  * Attaches server metadata (`organizationId`, `planId`) to Checkout Session.
+  * Attaches server metadata (`organizationId`, `planId`) to Checkout Session and subscription data.
 * **Webhook Processing Endpoint (`POST /api/v1/billing/webhook`)**:
   * Unauthenticated endpoint using route-specific raw body parsing (`express.raw({ type: 'application/json' })`) for signature verification with `STRIPE_WEBHOOK_SECRET`. Excluded from JWT auth and API usage limits.
   * Handles events: `checkout.session.completed`, `customer.subscription.updated`, `customer.subscription.deleted`.
-  * Maps Stripe statuses (`trialing`, `active`, `past_due`, `canceled`, `unpaid`, `incomplete`) to Prisma `SubscriptionStatus` enum (`TRIALING`, `ACTIVE`, `PAST_DUE`, `CANCELLED`, `EXPIRED`).
-  * Webhook updates FlowSuite `Subscription` fields (`planId`, `status`, `stripeCustomerId`, `stripeSubscriptionId`, `currentPeriodStart`, `currentPeriodEnd`).
-  * Idempotent processing: Repeated webhook events do not corrupt subscriptions or produce duplicate plan-change audit logs.
+  * Maps Stripe statuses (`trialing`, `active`, `past_due`, `canceled`, `unpaid`, `incomplete`, `incomplete_expired`, `paused`) to Prisma `SubscriptionStatus` enum (`TRIALING`, `ACTIVE`, `PAST_DUE`, `CANCELLED`, `EXPIRED`). Unknown statuses fall back to `ACTIVE`.
+  * Webhook updates FlowSuite `Subscription` fields (`planId`, `status`, `stripeCustomerId`, `stripeSubscriptionId`, `currentPeriodStart`, `currentPeriodEnd`). Validates metadata plan ID against `Plan` table during `customer.subscription.updated`, falling back to price ID mapping.
+  * Webhook handling updates persisted subscription state and creates a `SUBSCRIPTION_PLAN_CHANGED` audit entry only when the persisted subscription plan actually changes.
   * Audit logging: Creates `SUBSCRIPTION_PLAN_CHANGED` audit records with `actorId: null` on subscription plan updates.
 * **Environment Configuration**: Extended `server/src/config/env.ts` and `.env.example` with `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, `STRIPE_STARTER_PRICE_ID`, and `STRIPE_PROFESSIONAL_PRICE_ID`.
-* **Vitest Coverage**: Comprehensive unit tests added in `stripe.service.test.ts` and `billing.routes.test.ts`. **172 automated Vitest tests passing across 16 test suites.**
-* **Build status**: Verified clean TypeScript compilation (`npm run build`). No Prisma schema changes or migrations required.
+* **Vitest Coverage**: Comprehensive unit tests added in `stripe.service.test.ts` and `billing.routes.test.ts`. **176 automated Vitest tests passing across 16 test suites.**
+* **Build status**: Verified clean TypeScript compilation (`npm run build`). Pushed to `origin/main` (commit `321afea`). No Prisma schema changes or migrations required.
 
 > [!IMPORTANT]
 > **Planned vs. Implemented Functionality:** Authentication, JWT, RBAC, organization membership, Project Management, Task Management, Customer Management, Customer-Project associations, Organization Audit Log retrieval, Subscription Entitlements, Usage Tracking/Limits, and Stripe Test-Mode Billing Foundation are implemented and tested. Live Stripe payments and frontend billing UI are planned according to the FlowSuite PRD.
@@ -283,6 +309,8 @@ http://localhost:5173
 
 | Method | Endpoint | Permitted Roles | Purpose |
 | ------ | -------- | --------------- | ------- |
+| GET | `/api/v1/subscription` | OWNER, ADMIN | Retrieve organization subscription details & plan entitlements |
+| GET | `/api/v1/usage` | OWNER, ADMIN | Retrieve organization API request usage and limit status |
 | POST | `/api/v1/billing/checkout` | OWNER | Create Stripe test-mode Checkout Session for plan upgrade |
 | POST | `/api/v1/billing/webhook` | Public (Stripe Signature) | Receive and process Stripe test-mode webhook events |
 
@@ -318,12 +346,14 @@ Current test coverage includes:
 * Customer RBAC permissions (`OWNER`/`ADMIN`/`MANAGER` full CRUD; `MEMBER` total denial).
 * Customer ↔ Project association (linking, unlinking, and listing customer projects).
 * Organization audit log retrieval (pagination, action/actor filtering, and RBAC guards).
+* Subscription entitlement retrieval & limit checking (seats, projects, API request limits, analytics).
+* API usage tracking, billing period rollover, and API request limit enforcement.
 * Stripe test-mode customer creation, checkout session generation, webhook handling, and audit logging.
-* Cross-tenant isolation verification across membership, project, task, customer, audit log, and billing domains.
+* Tenant isolation is enforced across membership, project, task, customer, audit log, subscription, usage, and billing flows through authenticated organization scoping.
 
 Note: Current tests consist of service-level unit tests with mocked Prisma and Stripe SDK, alongside isolated middleware and route unit tests. No HTTP end-to-end integration tests or live PostgreSQL/Stripe integration tests are involved.
 
-**Current result: 172 automated tests passing across 16 test suites.**
+**Current result: 176 automated tests passing across 16 test suites.**
 **Build status: `npm run build` passing cleanly.**
 
 ## Database
@@ -451,10 +481,41 @@ npx prisma studio
 * Backend build verified (`npm run build`).
 * No schema changes or migrations required.
 
-#### Upcoming Development
+### Week 3 — Subscriptions, Usage Limits & Billing
 
-* **Week 3**: Subscriptions, Usage Limits & Billing.
-* **Week 4**: Final Testing, Documentation & Deployment.
+#### Day 10 — Subscription & Plan Entitlement Foundation
+
+* Organization subscription retrieval endpoint (`GET /api/v1/subscription`).
+* Entitlement engine for seat limits, project limits, API request limits, and advanced analytics for Free, Starter, and Professional plans.
+* Server-side RBAC: `OWNER` and `ADMIN` allowed; `MANAGER` and `MEMBER` denied (HTTP 403 `INSUFFICIENT_ROLE`).
+* Tenant isolation strictly enforced via `req.user.organizationId`.
+* **132 automated tests passing across 12 test suites.**
+* Backend build verified (`npm run build`). No schema changes or migrations required.
+
+#### Day 11 — API Usage Tracking & Limits
+
+* Organization API usage retrieval endpoint (`GET /api/v1/usage`).
+* Usage tracking and period rollover (`UsageCounter` model).
+* Route middleware ordering: `authenticate → enforceApiUsageLimit → requireRole → handler`.
+* Exclusions: `/health`, `/api/v1/auth/*`, `POST /api/v1/memberships/accept-invite`, and `GET /api/v1/usage`.
+* Atomic conditional database updates (`apiRequests < apiRequestLimit`) enforcing limits; HTTP 429 (`API_USAGE_LIMIT_EXCEEDED`) returned when exhausted.
+* **148 automated tests passing across 14 test suites.**
+* Backend build verified (`npm run build`). No schema changes or migrations required.
+
+#### Day 12 — Stripe Test-Mode Billing Foundation
+
+* Stripe test-mode Checkout Session endpoint (`POST /api/v1/billing/checkout`) for `OWNER` role plan upgrades.
+* Stripe Webhook processing endpoint (`POST /api/v1/billing/webhook`) with raw request body verification (`express.raw({ type: 'application/json' })`) and `STRIPE_WEBHOOK_SECRET` signature check.
+* Handles `checkout.session.completed`, `customer.subscription.updated`, `customer.subscription.deleted`.
+* Maps Stripe status strings to Prisma `SubscriptionStatus` enum (`TRIALING`, `ACTIVE`, `PAST_DUE`, `CANCELLED`, `EXPIRED`).
+* Updates `Subscription` record fields (`planId`, `status`, `stripeCustomerId`, `stripeSubscriptionId`, `currentPeriodStart`, `currentPeriodEnd`). Validates metadata plan ID against `Plan` table during `customer.subscription.updated`, falling back to price ID mapping.
+* Webhook handling updates persisted subscription state and creates a `SUBSCRIPTION_PLAN_CHANGED` audit entry only when the persisted subscription plan actually changes.
+* **176 automated tests passing across 16 test suites.**
+* Backend build verified (`npm run build`). Commit `321afea` pushed to `origin/main`. No schema changes or migrations required.
+
+### Week 4
+
+* Final Testing, Documentation & Deployment.
 
 ## Project Scope
 

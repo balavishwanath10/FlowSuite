@@ -197,11 +197,14 @@ Indexes defined in the Prisma schema include:
 * `Customer`: `@@index([organizationId])`, `@@index([organizationId, email])`.
 * `Subscription`: `@@index([planId])`, `@@index([status])`, unique constraints on `organizationId`, `stripeCustomerId`, `stripeSubscriptionId`.
 * `AuditLog`: `@@index([organizationId])`, `@@index([actorId])`, `@@index([organizationId, createdAt])`.
-* `UsageCounter`: `@@index([organizationId])`, `@@unique([organizationId, year, month])`.
+* `UsageCounter`: unique constraint on `organizationId`, `@@index([periodStart, periodEnd])`.
 
 ## Migration Status
 
 * **Initial Migration**: `20261002043238_init` introduced all ten core models.
-* **Day 7 Status**: Day 7 required **no database schema changes or migrations**, as the existing `Customer`, `Project`, `Organization`, and `AuditLog` models introduced in the Day 2 baseline fully satisfied all Day 7 PRD requirements. No new tables, columns, indexes, constraints, status/archive fields, or relationships were added.
+* **Day 7 Status**: Day 7 required **no database schema changes or migrations**, as the existing `Customer`, `Project`, `Organization`, and `AuditLog` models introduced in the Day 2 baseline fully satisfied all Day 7 PRD requirements.
 * **Day 8 Status**: Day 8 required **no database schema changes or migrations**, as the existing implicit `Customer.projects <-> Project.customers` relationship introduced in the Day 2 baseline fully satisfied all Day 8 requirements.
 * **Day 9 Status**: Day 9 required **no database schema changes or migrations**, as it provides a read/retrieval capability over the existing `AuditLog` model introduced in Day 2.
+* **Day 10 Status**: Day 10 required **no database schema changes or migrations**, as the existing `Plan` and `Subscription` models introduced in the Day 2 baseline fully satisfied all entitlement retrieval requirements.
+* **Day 11 Status**: Day 11 required **no database schema changes or migrations**, as the existing `UsageCounter` model introduced in the Day 2 baseline fully satisfied all usage tracking and limit enforcement requirements.
+* **Day 12 Status**: Day 12 required **no database schema changes or migrations**, as the existing Stripe fields (`stripeCustomerId`, `stripeSubscriptionId`, `currentPeriodStart`, `currentPeriodEnd`) on `Subscription` introduced in the Day 2 baseline fully satisfied all test-mode billing foundation requirements.
