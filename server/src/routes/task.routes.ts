@@ -5,6 +5,7 @@ import {
   AuthenticatedRequest,
 } from '../middleware/auth.middleware';
 import { requireRole } from '../middleware/rbac.middleware';
+import { enforceApiUsageLimit } from '../middleware/usage.middleware';
 import {
   assignTask,
   createTask,
@@ -63,6 +64,7 @@ const assignTaskSchema = z.object({
 router.get(
   '/',
   authenticate,
+  enforceApiUsageLimit,
   requireRole('OWNER', 'ADMIN', 'MANAGER', 'MEMBER'),
   async (req: AuthenticatedRequest, res: Response) => {
     const queryValidation = listTasksQuerySchema.safeParse(req.query);
@@ -108,6 +110,7 @@ router.get(
 router.get(
   '/:taskId',
   authenticate,
+  enforceApiUsageLimit,
   requireRole('OWNER', 'ADMIN', 'MANAGER', 'MEMBER'),
   async (req: AuthenticatedRequest, res: Response) => {
     const paramValidation = taskIdParamSchema.safeParse(req.params);
@@ -161,6 +164,7 @@ router.get(
 router.post(
   '/',
   authenticate,
+  enforceApiUsageLimit,
   requireRole('OWNER', 'ADMIN', 'MANAGER'),
   async (req: AuthenticatedRequest, res: Response) => {
     const validation = createTaskSchema.safeParse(req.body);
@@ -218,6 +222,7 @@ router.post(
 router.patch(
   '/:taskId',
   authenticate,
+  enforceApiUsageLimit,
   requireRole('OWNER', 'ADMIN'),
   async (req: AuthenticatedRequest, res: Response) => {
     const paramValidation = taskIdParamSchema.safeParse(req.params);
@@ -286,6 +291,7 @@ router.patch(
 router.patch(
   '/:taskId/status',
   authenticate,
+  enforceApiUsageLimit,
   requireRole('OWNER', 'ADMIN', 'MANAGER', 'MEMBER'),
   async (req: AuthenticatedRequest, res: Response) => {
     const paramValidation = taskIdParamSchema.safeParse(req.params);
@@ -352,6 +358,7 @@ router.patch(
 router.patch(
   '/:taskId/assign',
   authenticate,
+  enforceApiUsageLimit,
   requireRole('OWNER', 'ADMIN', 'MANAGER'),
   async (req: AuthenticatedRequest, res: Response) => {
     const paramValidation = taskIdParamSchema.safeParse(req.params);

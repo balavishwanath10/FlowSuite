@@ -5,6 +5,7 @@ import {
   AuthenticatedRequest,
 } from '../middleware/auth.middleware';
 import { requireRole } from '../middleware/rbac.middleware';
+import { enforceApiUsageLimit } from '../middleware/usage.middleware';
 import {
   archiveProject,
   createProject,
@@ -43,6 +44,7 @@ const updateProjectSchema = z
 router.get(
   '/',
   authenticate,
+  enforceApiUsageLimit,
   requireRole('OWNER', 'ADMIN', 'MANAGER', 'MEMBER'),
   async (req: AuthenticatedRequest, res: Response) => {
     if (!req.user) {
@@ -75,6 +77,7 @@ router.get(
 router.get(
   '/:projectId',
   authenticate,
+  enforceApiUsageLimit,
   requireRole('OWNER', 'ADMIN', 'MANAGER', 'MEMBER'),
   async (req: AuthenticatedRequest, res: Response) => {
     const paramValidation = projectIdParamSchema.safeParse(req.params);
@@ -128,6 +131,7 @@ router.get(
 router.post(
   '/',
   authenticate,
+  enforceApiUsageLimit,
   requireRole('OWNER', 'ADMIN', 'MANAGER'),
   async (req: AuthenticatedRequest, res: Response) => {
     const validation = createProjectSchema.safeParse(req.body);
@@ -175,6 +179,7 @@ router.post(
 router.patch(
   '/:projectId',
   authenticate,
+  enforceApiUsageLimit,
   requireRole('OWNER', 'ADMIN', 'MANAGER'),
   async (req: AuthenticatedRequest, res: Response) => {
     const paramValidation = projectIdParamSchema.safeParse(req.params);
@@ -241,6 +246,7 @@ router.patch(
 router.post(
   '/:projectId/archive',
   authenticate,
+  enforceApiUsageLimit,
   requireRole('OWNER', 'ADMIN', 'MANAGER'),
   async (req: AuthenticatedRequest, res: Response) => {
     const paramValidation = projectIdParamSchema.safeParse(req.params);

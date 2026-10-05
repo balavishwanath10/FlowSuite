@@ -5,6 +5,7 @@ import {
   AuthenticatedRequest,
 } from '../middleware/auth.middleware';
 import { requireRole } from '../middleware/rbac.middleware';
+import { enforceApiUsageLimit } from '../middleware/usage.middleware';
 import {
   acceptInvitation,
   inviteOrganizationMember,
@@ -38,6 +39,7 @@ const updateRoleSchema = z.object({
 router.get(
   '/',
   authenticate,
+  enforceApiUsageLimit,
   requireRole('OWNER', 'ADMIN', 'MANAGER', 'MEMBER'),
   async (req: AuthenticatedRequest, res: Response) => {
     if (!req.user) {
@@ -68,6 +70,7 @@ router.get(
 router.post(
   '/invite',
   authenticate,
+  enforceApiUsageLimit,
   requireRole('OWNER', 'ADMIN'),
   async (req: AuthenticatedRequest, res: Response) => {
     const validation = inviteSchema.safeParse(req.body);
@@ -145,6 +148,7 @@ router.post('/accept-invite', async (req: Request, res: Response) => {
 router.patch(
   '/role',
   authenticate,
+  enforceApiUsageLimit,
   requireRole('OWNER'),
   async (req: AuthenticatedRequest, res: Response) => {
     const validation = updateRoleSchema.safeParse(req.body);
@@ -193,6 +197,7 @@ router.patch(
 router.delete(
   '/:membershipId',
   authenticate,
+  enforceApiUsageLimit,
   requireRole('OWNER'),
   async (req: AuthenticatedRequest, res: Response) => {
     const validation = membershipIdSchema.safeParse(req.params);

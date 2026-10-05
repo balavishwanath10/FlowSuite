@@ -5,6 +5,7 @@ import {
   AuthenticatedRequest,
 } from '../middleware/auth.middleware';
 import { requireRole } from '../middleware/rbac.middleware';
+import { enforceApiUsageLimit } from '../middleware/usage.middleware';
 import {
   createCustomer,
   deleteCustomer,
@@ -52,6 +53,7 @@ const updateCustomerSchema = z
 router.get(
   '/',
   authenticate,
+  enforceApiUsageLimit,
   requireRole('OWNER', 'ADMIN', 'MANAGER'),
   async (req: AuthenticatedRequest, res: Response) => {
     if (!req.user) {
@@ -82,6 +84,7 @@ router.get(
 router.get(
   '/:customerId',
   authenticate,
+  enforceApiUsageLimit,
   requireRole('OWNER', 'ADMIN', 'MANAGER'),
   async (req: AuthenticatedRequest, res: Response) => {
     const paramValidation = customerIdParamSchema.safeParse(req.params);
@@ -133,6 +136,7 @@ router.get(
 router.get(
   '/:customerId/projects',
   authenticate,
+  enforceApiUsageLimit,
   requireRole('OWNER', 'ADMIN', 'MANAGER'),
   async (req: AuthenticatedRequest, res: Response) => {
     const paramValidation = customerIdParamSchema.safeParse(req.params);
@@ -184,6 +188,7 @@ router.get(
 router.post(
   '/',
   authenticate,
+  enforceApiUsageLimit,
   requireRole('OWNER', 'ADMIN', 'MANAGER'),
   async (req: AuthenticatedRequest, res: Response) => {
     const validation = createCustomerSchema.safeParse(req.body);
@@ -232,6 +237,7 @@ router.post(
 router.post(
   '/:customerId/projects/:projectId',
   authenticate,
+  enforceApiUsageLimit,
   requireRole('OWNER', 'ADMIN', 'MANAGER'),
   async (req: AuthenticatedRequest, res: Response) => {
     const paramValidation = customerProjectParamsSchema.safeParse(req.params);
@@ -293,6 +299,7 @@ router.post(
 router.patch(
   '/:customerId',
   authenticate,
+  enforceApiUsageLimit,
   requireRole('OWNER', 'ADMIN', 'MANAGER'),
   async (req: AuthenticatedRequest, res: Response) => {
     const paramValidation = customerIdParamSchema.safeParse(req.params);
@@ -359,6 +366,7 @@ router.patch(
 router.delete(
   '/:customerId',
   authenticate,
+  enforceApiUsageLimit,
   requireRole('OWNER', 'ADMIN', 'MANAGER'),
   async (req: AuthenticatedRequest, res: Response) => {
     const paramValidation = customerIdParamSchema.safeParse(req.params);
@@ -411,6 +419,7 @@ router.delete(
 router.delete(
   '/:customerId/projects/:projectId',
   authenticate,
+  enforceApiUsageLimit,
   requireRole('OWNER', 'ADMIN', 'MANAGER'),
   async (req: AuthenticatedRequest, res: Response) => {
     const paramValidation = customerProjectParamsSchema.safeParse(req.params);

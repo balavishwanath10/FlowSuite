@@ -4,6 +4,7 @@ import {
   AuthenticatedRequest,
 } from '../middleware/auth.middleware';
 import { requireRole } from '../middleware/rbac.middleware';
+import { enforceApiUsageLimit } from '../middleware/usage.middleware';
 import { getOrganizationSubscription } from '../services/subscription.service';
 
 const router = Router();
@@ -11,6 +12,7 @@ const router = Router();
 router.get(
   '/',
   authenticate,
+  enforceApiUsageLimit,
   requireRole('OWNER', 'ADMIN'),
   async (req: AuthenticatedRequest, res: Response) => {
     if (!req.user) {

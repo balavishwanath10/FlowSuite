@@ -5,6 +5,7 @@ import {
   AuthenticatedRequest,
 } from '../middleware/auth.middleware';
 import { requireRole } from '../middleware/rbac.middleware';
+import { enforceApiUsageLimit } from '../middleware/usage.middleware';
 import { listOrganizationAuditLogs } from '../services/audit-log.service';
 
 const router = Router();
@@ -19,6 +20,7 @@ const listAuditLogsQuerySchema = z.object({
 router.get(
   '/',
   authenticate,
+  enforceApiUsageLimit,
   requireRole('OWNER', 'ADMIN'),
   async (req: AuthenticatedRequest, res: Response) => {
     const queryValidation = listAuditLogsQuerySchema.safeParse(req.query);
