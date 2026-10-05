@@ -94,6 +94,20 @@ Authenticated Request → JWT Middleware → RBAC Middleware (OWNER/ADMIN) → A
 
 Audit log retrieval derives tenant scoping exclusively from `req.user.organizationId`. Queries compute total count and paginated result set (`createdAt DESC`) in parallel, applying optional `action` and `actorId` filters while selecting explicit actor fields (`id`, `name`, `email`).
 
+### Stripe Test-Mode Billing Flows
+
+#### 1. Checkout Session Flow
+```text
+Authenticated Request → JWT Middleware → API Usage Middleware → RBAC Middleware (OWNER) → Billing Route → Stripe Service → Stripe API (Test Mode)
+```
+Checkout creation strictly uses `req.user.organizationId` for tenant identification. Plan details and pricing are resolved from server-side `Plan` table and environment configuration. Free plans are blocked from checkout.
+
+#### 2. Webhook Processing Flow
+```text
+Unauthenticated Request (Stripe Signature Header) → Express Raw Body Middleware → Billing Route → Stripe Service (Signature Construct Verification) → Prisma / PostgreSQL + AuditLog
+```
+Stripe webhook requests bypass JWT authentication and API request usage limits. The raw request body buffer is verified against `STRIPE_WEBHOOK_SECRET`. Updates `Subscription` status and plan, creating `SUBSCRIPTION_PLAN_CHANGED` audit entries with `actorId: null`. Idempotent checks prevent duplicate state updates.
+
 ## 4. Multi-Tenant Data Isolation
 
 FlowSuite enforces strict organization-level data isolation at the backend service layer:

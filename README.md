@@ -112,12 +112,30 @@ The repository currently contains the completed **Day 1 foundation, Day 2 databa
 * Actor payload selection: Returns limited actor profile data (`id`, `name`, `email`).
 * Input validation: Zod schema query validation returning HTTP 400 `VALIDATION_ERROR` for invalid parameters (e.g. non-positive page numbers, out-of-bound limits, non-UUID actor IDs).
 * Codebase additions: `audit-log.service.ts`, `audit-log.routes.ts`, `audit-log.service.test.ts`, expanded RBAC test coverage, and router registration in `src/index.ts`.
-* **114 automated Vitest unit tests passing across 11 test suites.**
-* TypeScript backend build verified cleanly (`npm run build`).
-* No database migration or Prisma schema change was required.
+
+### Day 12 — Stripe Test-Mode Billing Foundation
+
+* **Stripe Test-Mode Integration**: Integrated official Stripe Node SDK (`stripe`) for test-mode checkout sessions and webhook processing.
+* **Checkout Session Endpoint (`POST /api/v1/billing/checkout`)**:
+  * Allows authenticated `OWNER` users to initiate test-mode Stripe Checkout sessions for paid plans (`Starter`, `Professional`).
+  * Server resolves requested plan from `Plan` DB table and maps to configured Stripe price IDs (`STRIPE_STARTER_PRICE_ID`, `STRIPE_PROFESSIONAL_PRICE_ID`). Client-supplied prices/amounts are strictly ignored.
+  * Free plan cannot be purchased via checkout (returns HTTP 400 `FREE_PLAN_CANNOT_BE_PURCHASED`).
+  * Tenant isolation: `req.user.organizationId` used exclusively. Client-supplied organization IDs are rejected/ignored.
+  * Generates/reuses Stripe customer ID (`Subscription.stripeCustomerId`) stored on subscription record.
+  * Attaches server metadata (`organizationId`, `planId`) to Checkout Session.
+* **Webhook Processing Endpoint (`POST /api/v1/billing/webhook`)**:
+  * Unauthenticated endpoint using route-specific raw body parsing (`express.raw({ type: 'application/json' })`) for signature verification with `STRIPE_WEBHOOK_SECRET`. Excluded from JWT auth and API usage limits.
+  * Handles events: `checkout.session.completed`, `customer.subscription.updated`, `customer.subscription.deleted`.
+  * Maps Stripe statuses (`trialing`, `active`, `past_due`, `canceled`, `unpaid`, `incomplete`) to Prisma `SubscriptionStatus` enum (`TRIALING`, `ACTIVE`, `PAST_DUE`, `CANCELLED`, `EXPIRED`).
+  * Webhook updates FlowSuite `Subscription` fields (`planId`, `status`, `stripeCustomerId`, `stripeSubscriptionId`, `currentPeriodStart`, `currentPeriodEnd`).
+  * Idempotent processing: Repeated webhook events do not corrupt subscriptions or produce duplicate plan-change audit logs.
+  * Audit logging: Creates `SUBSCRIPTION_PLAN_CHANGED` audit records with `actorId: null` on subscription plan updates.
+* **Environment Configuration**: Extended `server/src/config/env.ts` and `.env.example` with `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, `STRIPE_STARTER_PRICE_ID`, and `STRIPE_PROFESSIONAL_PRICE_ID`.
+* **Vitest Coverage**: Comprehensive unit tests added in `stripe.service.test.ts` and `billing.routes.test.ts`. **172 automated Vitest tests passing across 16 test suites.**
+* **Build status**: Verified clean TypeScript compilation (`npm run build`). No Prisma schema changes or migrations required.
 
 > [!IMPORTANT]
-> **Planned vs. Implemented Functionality:** Authentication, JWT, RBAC, organization membership, Project Management, Task Management, Customer Management, Customer-Project associations, and Organization Audit Log retrieval are now implemented and tested. Subscription upgrades/billing, usage enforcement, and remaining business-domain functionality are planned according to the FlowSuite PRD and will be implemented in their scheduled phases.
+> **Planned vs. Implemented Functionality:** Authentication, JWT, RBAC, organization membership, Project Management, Task Management, Customer Management, Customer-Project associations, Organization Audit Log retrieval, Subscription Entitlements, Usage Tracking/Limits, and Stripe Test-Mode Billing Foundation are implemented and tested. Live Stripe payments and frontend billing UI are planned according to the FlowSuite PRD.
 
 ## Tech Stack
 
@@ -261,6 +279,13 @@ http://localhost:5173
 | ------ | -------- | --------------- | ------- |
 | GET | `/api/v1/audit-logs` | OWNER, ADMIN | Retrieve organization audit logs with pagination & filtering |
 
+### Billing & Subscriptions
+
+| Method | Endpoint | Permitted Roles | Purpose |
+| ------ | -------- | --------------- | ------- |
+| POST | `/api/v1/billing/checkout` | OWNER | Create Stripe test-mode Checkout Session for plan upgrade |
+| POST | `/api/v1/billing/webhook` | Public (Stripe Signature) | Receive and process Stripe test-mode webhook events |
+
 ## Testing
 
 The backend uses Vitest for automated service-level testing.
@@ -293,11 +318,12 @@ Current test coverage includes:
 * Customer RBAC permissions (`OWNER`/`ADMIN`/`MANAGER` full CRUD; `MEMBER` total denial).
 * Customer ↔ Project association (linking, unlinking, and listing customer projects).
 * Organization audit log retrieval (pagination, action/actor filtering, and RBAC guards).
-* Cross-tenant isolation verification across membership, project, task, customer, and audit log domains.
+* Stripe test-mode customer creation, checkout session generation, webhook handling, and audit logging.
+* Cross-tenant isolation verification across membership, project, task, customer, audit log, and billing domains.
 
-Note: Current tests consist of service-level unit tests with mocked Prisma, alongside isolated RBAC middleware unit tests. No HTTP end-to-end integration tests or live PostgreSQL integration tests are involved.
+Note: Current tests consist of service-level unit tests with mocked Prisma and Stripe SDK, alongside isolated middleware and route unit tests. No HTTP end-to-end integration tests or live PostgreSQL/Stripe integration tests are involved.
 
-**Current result: 114 automated tests passing across 11 test suites.**
+**Current result: 172 automated tests passing across 16 test suites.**
 **Build status: `npm run build` passing cleanly.**
 
 ## Database

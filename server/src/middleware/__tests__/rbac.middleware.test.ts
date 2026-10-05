@@ -292,6 +292,33 @@ describe('RBAC Middleware', () => {
     }
   });
 
+  it('calls next() if OWNER accesses billing checkout endpoint', async () => {
+    mockPrisma.membership.findUnique.mockResolvedValue({ role: 'OWNER' });
+    const middleware = requireRole('OWNER');
+
+    await middleware(req as AuthenticatedRequest, res as Response, next);
+
+    expect(next).toHaveBeenCalled();
+    expect(res.status).not.toHaveBeenCalled();
+  });
+
+  it('returns 403 if ADMIN, MANAGER, or MEMBER tries to access billing checkout endpoint (OWNER required)', async () => {
+    for (const role of ['ADMIN', 'MANAGER', 'MEMBER']) {
+      vi.clearAllMocks();
+      mockPrisma.membership.findUnique.mockResolvedValue({ role });
+      const middleware = requireRole('OWNER');
+
+      await middleware(req as AuthenticatedRequest, res as Response, next);
+
+      expect(res.status).toHaveBeenCalledWith(403);
+      expect(res.json).toHaveBeenCalledWith({
+        code: 'INSUFFICIENT_ROLE',
+        message: 'You do not have permission to perform this action',
+      });
+      expect(next).not.toHaveBeenCalled();
+    }
+  });
+
   it('returns 500 if database query throws error', async () => {
     mockPrisma.membership.findUnique.mockRejectedValue(new Error('DB Error'));
     const middleware = requireRole('OWNER');

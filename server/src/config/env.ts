@@ -20,4 +20,9 @@ export const config = {
   jwtRefreshSecret: process.env.JWT_REFRESH_SECRET || '',
   jwtAccessExpiresIn: process.env.JWT_ACCESS_EXPIRES_IN || '15m',
   jwtRefreshExpiresIn: process.env.JWT_REFRESH_EXPIRES_IN || '7d',
+
+  stripeSecretKey: process.env.STRIPE_SECRET_KEY || 'sk_test_placeholder',
+  stripeWebhookSecret: process.env.STRIPE_WEBHOOK_SECRET || 'whsec_placeholder',
+  stripeStarterPriceId: process.env.STRIPE_STARTER_PRICE_ID || 'price_starter_test',
+  stripeProfessionalPriceId: process.env.STRIPE_PROFESSIONAL_PRICE_ID || 'price_prof_test',
 };

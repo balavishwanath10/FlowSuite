@@ -108,6 +108,27 @@ Audit log queries explicitly select non-sensitive actor fields:
 * `actor.name`
 * `actor.email`
 
+## Stripe Billing Data Model Integration (Day 12)
+
+### Subscription Entity Updates
+Stripe billing uses the existing Day 2 `Subscription` model without requiring Prisma schema modifications or migrations.
+Stripe webhook events update:
+* `planId` — updated to the new plan ID upon completed checkout or subscription update.
+* `status` — mapped from Stripe statuses (`trialing`, `active`, `past_due`, `canceled`, `unpaid`) to Prisma `SubscriptionStatus` (`TRIALING`, `ACTIVE`, `PAST_DUE`, `CANCELLED`, `EXPIRED`).
+* `stripeCustomerId` — persistent Stripe customer ID (`cus_...`). Unique constraint.
+* `stripeSubscriptionId` — persistent Stripe subscription ID (`sub_...`). Unique constraint.
+* `currentPeriodStart` / `currentPeriodEnd` — billing period dates.
+
+### AuditLog Integration for Webhooks
+When a Stripe webhook event changes an organization's subscription plan, an audit log entry is created:
+* `action` = `SUBSCRIPTION_PLAN_CHANGED`
+* `entityType` = `Subscription`
+* `entityId` = subscription ID
+* `actorId` = `null` (webhook events are system actions triggered by Stripe without a JWT user context)
+* `metadata` = `{ previousPlanId, newPlanId, stripeSubscriptionId }`
+
+Idempotent checks ensure repeated webhook deliveries do not create duplicate audit log entries or corrupt subscription state.
+
 ## Task Data Model & Relationships
 
 ### Task Entity

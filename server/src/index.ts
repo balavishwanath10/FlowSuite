@@ -10,10 +10,12 @@ import customerRoutes from './routes/customer.routes';
 import auditLogRoutes from './routes/audit-log.routes';
 import subscriptionRoutes from './routes/subscription.routes';
 import usageRoutes from './routes/usage.routes';
+import billingRoutes from './routes/billing.routes';
 
 const app = express();
 
 app.use(cors({ origin: config.clientUrl, credentials: true }));
+app.use('/api/v1/billing/webhook', express.raw({ type: 'application/json' }));
 app.use(express.json());
 
 app.use('/api/v1', healthRoutes);
@@ -25,6 +27,7 @@ app.use('/api/v1/customers', customerRoutes);
 app.use('/api/v1/audit-logs', auditLogRoutes);
 app.use('/api/v1/subscription', subscriptionRoutes);
 app.use('/api/v1/usage', usageRoutes);
+app.use('/api/v1/billing', billingRoutes);
 
 app.listen(config.port, () => {
   console.log(
