@@ -31,3 +31,6 @@ Thumbs.db
 *.sqlite
 
 # NOTE: Prisma migration files in `prisma/migrations` must NOT be ignored and MUST be committed to Git.
+
+# Test coverage output
+coverage/
