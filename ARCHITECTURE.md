@@ -128,6 +128,26 @@ Unauthenticated Request (Stripe Signature Header) → Express Raw Body Middlewar
 ```
 Stripe webhook requests bypass JWT authentication and API request usage limits. The raw request body buffer is verified against `STRIPE_WEBHOOK_SECRET`. Updates `Subscription` status and plan, creating `SUBSCRIPTION_PLAN_CHANGED` audit entries with `actorId: null`. Idempotent checks prevent duplicate state updates.
 
+### Security Hardening & Rate-Limiting Flow (Day 13)
+
+```text
+Login Request → Input Validation → Redis Rate-Limit Check → Authentication Service → JWT Token Generation → Response
+```
+
+Failed login attempts are rate-limited via Redis (`login-rate-limit.service.ts`). Requests check the failed-login counter (`failed_login:<email>`) before attempting authentication. If count $\ge 5$ within 15 minutes (900s), HTTP 429 (`TOO_MANY_FAILED_LOGINS`) is returned. On successful login, the counter is deleted. Unexpected backend exceptions are caught by route try/catch blocks or routed to the global Express error middleware in `index.ts` returning safe JSON (`INTERNAL_SERVER_ERROR`, 500) without exposing internal error tracebacks.
+
+### Coverage & Test Architecture (Day 14)
+
+Backend code coverage is instrumented using `@vitest/coverage-v8`. Dedicated authentication middleware coverage was added in `auth.middleware.test.ts` for missing Authorization headers, non-Bearer authorization, valid Bearer tokens, invalid tokens, and expired tokens, ensuring overall statement/line coverage exceeds 89.30% (satisfying the PRD requirement of $\ge 70\%$).
+
+### Continuous Integration & Integration Testing Flow (Day 15)
+
+```text
+Git Push / Pull Request (main) → GitHub Actions Runner (Ubuntu) → PostgreSQL 16 Service Container → Prisma Migration Deploy → Vitest Suite → TypeScript Build
+```
+
+Continuous integration is enforced via `.github/workflows/ci.yml`. The job spins up a PostgreSQL 16 service container (`postgres:16-alpine`), deploys database migrations via `npx prisma migrate deploy`, executes all 20 test files via `npm test -- --run` (including the database tenant-isolation integration test `project.tenant-isolation.integration.test.ts`), and verifies production TypeScript compilation via `npm run build`.
+
 ## 4. Multi-Tenant Data Isolation
 
 FlowSuite enforces strict organization-level data isolation at the backend service layer:
@@ -212,12 +232,15 @@ Implemented audit actions:
 
 ## 7. Testing & Verification Architecture
 
-The backend test suite is built with Vitest and focuses on service-level unit tests, middleware validation, and route handler testing:
+The backend test suite is built with Vitest and focuses on service-level unit tests, middleware validation, route handler testing, and database tenant-isolation integration testing:
 
-- **176 automated tests passing across 16 test suites.**
-- **Service Unit Tests**: Cover authentication, registration, login, refresh, password reset, membership/invitations, project CRUD, task CRUD, assignment validation, customer CRUD, customer-project associations, audit log retrieval, subscription entitlements, API usage tracking, and Stripe test-mode billing service (`stripe.service.ts`).
+- **195 automated tests passing across 20 test files.**
+- **Service Unit Tests**: Cover authentication, registration, login, refresh, password reset, membership/invitations, project CRUD, task CRUD, assignment validation, customer CRUD, customer-project associations, audit log retrieval, subscription entitlements, API usage tracking, failed-login rate limiting, and Stripe test-mode billing service (`stripe.service.ts`).
+- **Middleware Unit Tests**: Validate authentication (`auth.middleware.test.ts`), RBAC (`rbac.middleware.test.ts`), and API usage limit enforcement (`usage.middleware.test.ts`).
 - **RBAC & Visibility Tests**: Test exact role permission boundaries for `OWNER`, `ADMIN`, `MANAGER`, and `MEMBER`, including Member project and task visibility scoping, total Member denial on Customer routes, `OWNER`/`ADMIN`-only access on Audit Log/Subscription/Usage endpoints, and `OWNER`-only access on Billing checkout endpoints.
-- **Tenant Isolation Tests**: Explicit cross-tenant isolation tests asserting that queries attempting to access Organization B resources from Organization A context return 404 (or empty result set for audit log retrieval) and reject untrusted client tenant inputs.
+- **Tenant Isolation Integration Tests**: Explicit PostgreSQL integration test (`project.tenant-isolation.integration.test.ts`) asserting that queries attempting to access Organization A project resources using Organization B's context reject with `Project not found`.
+- **Coverage Instrumentation**: Instrumentated via `@vitest/coverage-v8` achieving 89.30% backend statement/line coverage.
+- **Continuous Integration Pipeline**: Validated on GitHub Actions (`.github/workflows/ci.yml`) using a PostgreSQL 16 service container to run migrations (`npx prisma migrate deploy`), execute all 20 test files, and verify production compilation (`npm run build`).
 - **Build Status**: Verified clean compilation via `npm run build` (`tsc`).
 
-Note: Current testing consists of service-level unit tests with mocked Prisma and Stripe SDK, alongside isolated middleware and route unit tests. No HTTP end-to-end integration tests or live PostgreSQL/Stripe integration tests are included in the test suite.
+Note: Tests consist of service-level unit tests, middleware tests, and route tests (with mocked Prisma, Redis, and Stripe SDKs), alongside an isolated PostgreSQL tenant-isolation integration test (`project.tenant-isolation.integration.test.ts`). No browser end-to-end testing or live Stripe integration tests are included in the test suite.

@@ -4,9 +4,9 @@
 
 FlowSuite is a production-style B2B SaaS platform designed to provide organizations with isolated workspaces for managing teams, customers, projects, and tasks — backed by role-based access control (RBAC), subscription billing, a flexible feature-entitlement engine, usage limits, and audit logging.
 
-## Current Status — Day 12 Stripe Test-Mode Billing Foundation
+## Current Status — Day 15 Final Testing, CI & Documentation Foundation
 
-The repository currently contains the completed **Day 1 foundation, Day 2 database schema, Day 3 authentication, Day 4 organization membership & RBAC, Day 5 project management, Day 6 task management, Day 7 customer management, Day 8 customer ↔ project association, Day 9 organization audit log retrieval, Day 10 subscription & plan entitlement foundation, Day 11 API usage tracking & limits, and Day 12 Stripe test-mode billing foundation**.
+The repository currently contains the completed **Day 1 foundation, Day 2 database schema, Day 3 authentication, Day 4 organization membership & RBAC, Day 5 project management, Day 6 task management, Day 7 customer management, Day 8 customer ↔ project association, Day 9 organization audit log retrieval, Day 10 subscription & plan entitlement foundation, Day 11 API usage tracking & limits, Day 12 Stripe test-mode billing foundation, Day 13 security hardening, Day 14 backend coverage hardening, and Day 15 final testing & CI foundation**.
 
 ### Day 1 — Foundation
 
@@ -160,8 +160,28 @@ The repository currently contains the completed **Day 1 foundation, Day 2 databa
 * **Vitest Coverage**: Comprehensive unit tests added in `stripe.service.test.ts` and `billing.routes.test.ts`. **176 automated Vitest tests passing across 16 test suites.**
 * **Build status**: Verified clean TypeScript compilation (`npm run build`). Pushed to `origin/main` (commit `321afea`). No Prisma schema changes or migrations required.
 
+### Day 13 — Security Hardening
+
+* **Failed-Login Rate Limiting**: Implemented Redis-backed failed-login tracking in `login-rate-limit.service.ts` integrated into `POST /api/v1/auth/login`. Failed login attempts are tracked per normalized email address with `MAX_FAILED_LOGIN_ATTEMPTS = 5` and a window of `FAILED_LOGIN_WINDOW_SECONDS = 900` (15 minutes). Requests exceeding the limit return HTTP 429 (`TOO_MANY_FAILED_LOGINS`). Successful login clears the counter. Redis connection failures fail open for availability and emit warnings.
+* **Authentication Input Validation**: Login input is validated with Zod (`loginSchema`) prior to authentication processing, returning HTTP 400 `VALIDATION_ERROR` for malformed input.
+* **Safe JSON Error Handling**: Authentication and billing route errors are handled with safe JSON responses, and the global Express error middleware provides a final safe fallback for unexpected errors without exposing internal error details (`{ "code": "INTERNAL_SERVER_ERROR", "message": "An unexpected error occurred" }`, HTTP 500). Validation errors in billing checkout return HTTP 400 `VALIDATION_ERROR` with structured `errors`.
+* **Day 13 Milestone**: Verified with 190 tests passing across 18 test suites.
+
+### Day 14 — Coverage Hardening
+
+* **Coverage Instrumentation**: Configured `@vitest/coverage-v8` for backend coverage tracking (`coverage/` ignored in `.gitignore`).
+* **Authentication Middleware Coverage**: Added dedicated unit test suite in `server/src/middleware/__tests__/auth.middleware.test.ts` covering missing Authorization header, non-Bearer headers, valid Bearer tokens, invalid tokens, and expired tokens.
+* **Coverage Results**: Reached 89.30% Statements, 75.57% Branches, 93.97% Functions, and 89.30% Lines across the backend codebase, exceeding the PRD requirement of >=70%.
+* **Day 14 Milestone**: Verified with 194 tests passing across 19 test suites.
+
+### Day 15 — Final Testing, Tenant Isolation & Continuous Integration
+
+* **Tenant-Isolation Integration Test**: Implemented `server/src/services/__tests__/integration/project.tenant-isolation.integration.test.ts`. Creates two separate organizations in PostgreSQL, creates a project under Organization A, queries `getProjectById` using Organization B's ID, asserts rejection with `Project not found`, and cleans up test data in `afterAll`.
+* **GitHub Actions CI Pipeline**: Configured `.github/workflows/ci.yml` running on `push` and `pull_request` targeting `main`. Runs on `ubuntu-latest` with Node.js 20 and a PostgreSQL 16 service container (`postgres:16-alpine`), executing `npm ci`, `npx prisma migrate deploy`, `npm test -- --run`, and `npm run build`. (Redis is not provisioned as a service container in CI; Redis-dependent tests mock Redis interactions).
+* **Current Result**: **195 automated tests passing across 20 test files.** TypeScript production build (`npm run build`) passing cleanly.
+
 > [!IMPORTANT]
-> **Planned vs. Implemented Functionality:** Authentication, JWT, RBAC, organization membership, Project Management, Task Management, Customer Management, Customer-Project associations, Organization Audit Log retrieval, Subscription Entitlements, Usage Tracking/Limits, and Stripe Test-Mode Billing Foundation are implemented and tested. Live Stripe payments and frontend billing UI are planned according to the FlowSuite PRD.
+> **Planned vs. Implemented Functionality:** Authentication, JWT, RBAC, organization membership, Project Management, Task Management, Customer Management, Customer-Project associations, Organization Audit Log retrieval, Subscription Entitlements, Usage Tracking/Limits, Stripe Test-Mode Billing Foundation, Security Hardening, Coverage Hardening, Tenant Isolation Integration Testing, and Continuous Integration are implemented and tested. Live Stripe payments, frontend billing UI, and final production deployment remain pending according to project scope.
 
 ## Tech Stack
 
@@ -349,11 +369,14 @@ Current test coverage includes:
 * Subscription entitlement retrieval & limit checking (seats, projects, API request limits, analytics).
 * API usage tracking, billing period rollover, and API request limit enforcement.
 * Stripe test-mode customer creation, checkout session generation, webhook handling, and audit logging.
-* Tenant isolation is enforced across membership, project, task, customer, audit log, subscription, usage, and billing flows through authenticated organization scoping.
+* Redis-backed failed-login rate limiting and authentication input validation.
+* Authentication middleware coverage (`auth.middleware.test.ts`) covering all header and token states.
+* Database tenant-isolation integration coverage (`project.tenant-isolation.integration.test.ts`) asserting cross-tenant project query rejection.
+* Multi-tenant isolation enforced across membership, project, task, customer, audit log, subscription, usage, and billing flows.
 
-Note: Current tests consist of service-level unit tests with mocked Prisma and Stripe SDK, alongside isolated middleware and route unit tests. No HTTP end-to-end integration tests or live PostgreSQL/Stripe integration tests are involved.
+Note: The test suite consists of service-level unit tests, middleware tests, and route tests (with mocked Prisma, Redis, and Stripe SDKs), alongside an isolated PostgreSQL tenant-isolation integration test (`project.tenant-isolation.integration.test.ts`).
 
-**Current result: 176 automated tests passing across 16 test suites.**
+**Current result: 195 automated tests passing across 20 test files.**
 **Build status: `npm run build` passing cleanly.**
 
 ## Database
@@ -513,9 +536,28 @@ npx prisma studio
 * **176 automated tests passing across 16 test suites.**
 * Backend build verified (`npm run build`). Commit `321afea` pushed to `origin/main`. No schema changes or migrations required.
 
-### Week 4
+### Week 4 — Security, Coverage, Integration Testing & CI
 
-* Final Testing, Documentation & Deployment.
+#### Day 13 — Security Hardening & Rate Limiting
+
+* Redis-backed failed-login tracking (`login-rate-limit.service.ts`) with per-email rate limiting (max 5 attempts per 15 mins; HTTP 429 response).
+* Input validation for authentication requests using Zod.
+* Global Express error middleware in `index.ts` returning safe JSON errors without stack traces.
+* **190 automated tests passing across 18 test suites.**
+
+#### Day 14 — Authentication Middleware Coverage Hardening
+
+* Installed `@vitest/coverage-v8` instrumentation.
+* Created `server/src/middleware/__tests__/auth.middleware.test.ts` to test all authentication states.
+* Reached 89.30% backend statement/line coverage (exceeding PRD requirement of >=70%).
+* **194 automated tests passing across 19 test suites.**
+
+#### Day 15 — Tenant-Isolation Integration Testing, CI & Documentation
+
+* Implemented PostgreSQL tenant-isolation integration test (`project.tenant-isolation.integration.test.ts`).
+* Configured GitHub Actions CI pipeline (`.github/workflows/ci.yml`) with PostgreSQL 16 service container running migrations, Vitest suite, and TypeScript build.
+* Reached **195 automated tests passing across 20 test files.**
+* Deployment status: **Pending** (production deployment to be executed in upcoming phase).
 
 ## Project Scope
 
