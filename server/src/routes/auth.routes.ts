@@ -14,6 +14,12 @@ import {
   resetPassword,
 } from '../services/password-reset.service';
 
+import {
+  checkFailedLoginLimit,
+  clearFailedLoginAttempts,
+  recordFailedLoginAttempt,
+} from '../services/login-rate-limit.service';
+
 const router = Router();
 
 const registerSchema = z.object({
@@ -100,8 +106,19 @@ router.post('/login', async (req: Request, res: Response) => {
     });
   }
 
+  const email = validation.data.email.trim().toLowerCase();
+
   try {
+    const limitCheck = await checkFailedLoginLimit(email);
+    if (limitCheck.isBlocked) {
+      return res.status(429).json({
+        code: 'TOO_MANY_FAILED_LOGINS',
+        message: 'Too many failed login attempts. Please try again later.',
+      });
+    }
+
     const result = await loginUser(validation.data);
+    await clearFailedLoginAttempts(email);
 
     return res.status(200).json({
       code: 'LOGIN_SUCCESS',
@@ -116,6 +133,8 @@ router.post('/login', async (req: Request, res: Response) => {
       message === 'Invalid email or password' ||
       message === 'User organization membership not found'
     ) {
+      await recordFailedLoginAttempt(email);
+
       return res.status(401).json({
         code: 'LOGIN_FAILED',
         message: 'Invalid email or password',

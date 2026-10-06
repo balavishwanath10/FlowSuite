@@ -29,6 +29,21 @@ app.use('/api/v1/subscription', subscriptionRoutes);
 app.use('/api/v1/usage', usageRoutes);
 app.use('/api/v1/billing', billingRoutes);
 
+app.use(
+  (
+    err: any,
+    _req: express.Request,
+    res: express.Response,
+    _next: express.NextFunction,
+  ) => {
+    console.error('[Unhandled Error]', err);
+    return res.status(500).json({
+      code: 'INTERNAL_SERVER_ERROR',
+      message: 'An unexpected error occurred',
+    });
+  },
+);
+
 app.listen(config.port, () => {
   console.log(
     `[FlowSuite Server] Running in ${config.nodeEnv} mode on port ${config.port}`,

@@ -26,6 +26,7 @@ router.post(
         return res.status(400).json({
           code: 'VALIDATION_ERROR',
           message: 'Invalid request body',
+          errors: parsed.error.issues,
           details: parsed.error.issues,
         });
       }
