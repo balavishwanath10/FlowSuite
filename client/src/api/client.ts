@@ -157,3 +157,169 @@ export async function getUsageApi(token: string) {
     };
   }>('/usage', { method: 'GET' }, token);
 }
+
+/* ==========================================================================
+   DAY 17: PROJECTS, TASKS & MEMBERSHIPS API CONTRACTS
+   ========================================================================== */
+
+export interface Project {
+  id: string;
+  organizationId: string;
+  name: string;
+  description: string | null;
+  status: 'ACTIVE' | 'ARCHIVED';
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface Task {
+  id: string;
+  projectId: string;
+  assigneeId: string | null;
+  title: string;
+  description: string | null;
+  status: 'TODO' | 'IN_PROGRESS' | 'COMPLETED';
+  createdAt: string;
+  updatedAt: string;
+  dueDate?: string | null;
+  project?: {
+    id: string;
+    name: string;
+  };
+  assignee?: {
+    id: string;
+    name: string;
+    email: string;
+  } | null;
+}
+
+export interface Member {
+  id: string;
+  organizationId: string;
+  userId: string;
+  role: 'OWNER' | 'ADMIN' | 'MANAGER' | 'MEMBER';
+  user: {
+    id: string;
+    name: string;
+    email: string;
+  };
+}
+
+export async function getProjectsApi(token: string) {
+  return request<{
+    code: string;
+    projects: Project[];
+  }>('/projects', { method: 'GET' }, token);
+}
+
+export async function createProjectApi(
+  data: { name: string; description?: string },
+  token: string,
+) {
+  return request<{
+    code: string;
+    message: string;
+    project: Project;
+  }>('/projects', { method: 'POST', body: JSON.stringify(data) }, token);
+}
+
+export async function updateProjectApi(
+  projectId: string,
+  data: { name?: string; description?: string; status?: 'ACTIVE' | 'ARCHIVED' },
+  token: string,
+) {
+  return request<{
+    code: string;
+    message: string;
+    project: Project;
+  }>(`/projects/${projectId}`, { method: 'PATCH', body: JSON.stringify(data) }, token);
+}
+
+export async function archiveProjectApi(projectId: string, token: string) {
+  return request<{
+    code: string;
+    message: string;
+    project: Project;
+  }>(`/projects/${projectId}/archive`, { method: 'POST' }, token);
+}
+
+export async function getTasksApi(
+  token: string,
+  params?: { projectId?: string; assigneeId?: string; status?: 'TODO' | 'IN_PROGRESS' | 'COMPLETED' },
+) {
+  const query = new URLSearchParams();
+  if (params?.projectId) query.append('projectId', params.projectId);
+  if (params?.assigneeId) query.append('assigneeId', params.assigneeId);
+  if (params?.status) query.append('status', params.status);
+  const queryString = query.toString() ? `?${query.toString()}` : '';
+
+  return request<{
+    code: string;
+    tasks: Task[];
+  }>(`/tasks${queryString}`, { method: 'GET' }, token);
+}
+
+export async function createTaskApi(
+  data: {
+    projectId: string;
+    title: string;
+    description?: string;
+    assigneeId?: string | null;
+    status?: 'TODO' | 'IN_PROGRESS' | 'COMPLETED';
+  },
+  token: string,
+) {
+  return request<{
+    code: string;
+    message: string;
+    task: Task;
+  }>('/tasks', { method: 'POST', body: JSON.stringify(data) }, token);
+}
+
+export async function updateTaskApi(
+  taskId: string,
+  data: {
+    title?: string;
+    description?: string;
+    status?: 'TODO' | 'IN_PROGRESS' | 'COMPLETED';
+    assigneeId?: string | null;
+  },
+  token: string,
+) {
+  return request<{
+    code: string;
+    message: string;
+    task: Task;
+  }>(`/tasks/${taskId}`, { method: 'PATCH', body: JSON.stringify(data) }, token);
+}
+
+export async function updateTaskStatusApi(
+  taskId: string,
+  status: 'TODO' | 'IN_PROGRESS' | 'COMPLETED',
+  token: string,
+) {
+  return request<{
+    code: string;
+    message: string;
+    task: Task;
+  }>(`/tasks/${taskId}/status`, { method: 'PATCH', body: JSON.stringify({ status }) }, token);
+}
+
+export async function assignTaskApi(
+  taskId: string,
+  assigneeId: string | null,
+  token: string,
+) {
+  return request<{
+    code: string;
+    message: string;
+    task: Task;
+  }>(`/tasks/${taskId}/assign`, { method: 'PATCH', body: JSON.stringify({ assigneeId }) }, token);
+}
+
+export async function getMembersApi(token: string) {
+  return request<{
+    code: string;
+    members: Member[];
+  }>('/memberships', { method: 'GET' }, token);
+}

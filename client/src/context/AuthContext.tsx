@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import {
   ApiError,
+  getMembersApi,
   getMeApi,
   loginApi,
   logoutApi,
@@ -12,6 +13,7 @@ export interface UserContext {
   organizationId: string;
   name?: string;
   email?: string;
+  role?: 'OWNER' | 'ADMIN' | 'MANAGER' | 'MEMBER';
 }
 
 export interface AuthContextType {
@@ -57,9 +59,20 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
       if (storedAccessToken) {
         try {
           const res = await getMeApi(storedAccessToken);
+          let role: 'OWNER' | 'ADMIN' | 'MANAGER' | 'MEMBER' | undefined = undefined;
+          try {
+            const membersRes = await getMembersApi(storedAccessToken);
+            const currentMember = membersRes.members.find(
+              (m) => m.userId === res.data.userId,
+            );
+            if (currentMember) role = currentMember.role;
+          } catch {
+            // Ignore membership lookup failure during init
+          }
           setUser({
             userId: res.data.userId,
             organizationId: res.data.organizationId,
+            role,
           });
           setAccessToken(storedAccessToken);
         } catch {
@@ -89,11 +102,22 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
       localStorage.setItem(REFRESH_TOKEN_KEY, newRefresh);
       setAccessToken(newAccess);
       setRefreshToken(newRefresh);
+
+      let role: 'OWNER' | 'ADMIN' | 'MANAGER' | 'MEMBER' | undefined = undefined;
+      try {
+        const membersRes = await getMembersApi(newAccess);
+        const currentMember = membersRes.members.find((m) => m.userId === authUser.id);
+        if (currentMember) role = currentMember.role;
+      } catch {
+        // Ignore membership lookup error
+      }
+
       setUser({
         userId: authUser.id,
         organizationId: organization.id,
         name: authUser.name,
         email: authUser.email,
+        role,
       });
     } catch (err) {
       if (err instanceof ApiError) {
@@ -124,11 +148,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
       localStorage.setItem(REFRESH_TOKEN_KEY, newRefresh);
       setAccessToken(newAccess);
       setRefreshToken(newRefresh);
+
       setUser({
         userId: authUser.id,
         organizationId: organization.id,
         name: authUser.name,
         email: authUser.email,
+        role: 'OWNER', // Newly registered org creator is OWNER
       });
     } catch (err) {
       if (err instanceof ApiError) {
