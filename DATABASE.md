@@ -211,3 +211,13 @@ Indexes defined in the Prisma schema include:
 * **Day 13 Status**: Day 13 required **no database schema changes or migrations**, as failed-login rate-limiting counter tracking uses Redis (`failed_login:<email>`) rather than PostgreSQL.
 * **Day 14 Status**: Day 14 required **no database schema changes or migrations**, as backend coverage hardening added Vitest test suite coverage (`auth.middleware.test.ts`).
 * **Day 15 Status**: Day 15 required **no database schema changes or migrations**, as the PostgreSQL tenant-isolation integration test (`project.tenant-isolation.integration.test.ts`) operates over the existing `Organization` and `Project` models, cleaning up created test entities in `afterAll`.
+* **Day 16 Status**: Day 16 required **no database schema changes or migrations**, as frontend-only authentication and organization dashboard work consumes existing backend authentication, `Subscription`, and `UsageCounter` endpoints.
+* **Day 17 Status**: Day 17 required **no database schema changes or migrations**, as frontend-only Projects and Tasks work consumes existing `Project`, `Task`, `Membership`, and `Organization` relationships.
+* **Day 18 Status**: Day 18 required **no database schema changes or migrations**, as frontend-only Customers and Customer-Project association work consumes existing `Customer`, `Project`, `Organization`, and implicit `Customer.projects <-> Project.customers` relationships.
+
+### Summary of Days 16–18 Database Changes
+- **No new tables** were created.
+- **No new columns** were added.
+- **No new indexes** were created.
+- **No new constraints** were introduced.
+- **No database migrations** were created or applied.

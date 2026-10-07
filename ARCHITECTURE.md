@@ -148,6 +148,45 @@ Git Push / Pull Request (main) → GitHub Actions Runner (Ubuntu) → PostgreSQL
 
 Continuous integration is enforced via `.github/workflows/ci.yml`. The job spins up a PostgreSQL 16 service container (`postgres:16-alpine`), deploys database migrations via `npx prisma migrate deploy`, executes all 20 test files via `npm test -- --run` (including the database tenant-isolation integration test `project.tenant-isolation.integration.test.ts`), and verifies production TypeScript compilation via `npm run build`.
 
+### Frontend Architecture & Domain Data Flows (Days 16–18)
+
+The frontend single-page application (React + Vite + TypeScript + Tailwind CSS) communicates with the backend exclusively through HTTP REST requests under `/api/v1` via a centralized typed API client (`client/src/api/client.ts`).
+
+#### 1. Authentication & Session Flow (Day 16)
+```text
+Login/Register Form → typed API client → POST /api/v1/auth/login or /register → JWT Tokens → AuthContext → ProtectedRoute → Layout
+```
+`AuthProvider` persists JWT tokens (`flowsuite_access_token`, `flowsuite_refresh_token`) in client storage and initializes user session context on app launch via `GET /api/v1/auth/me`. User role is resolved using `GET /api/v1/memberships`.
+
+#### 2. Organization Dashboard Flow (Day 16)
+```text
+Dashboard Component → typed API client → GET /api/v1/subscription + GET /api/v1/usage → Subscription Entitlements & Usage UI
+```
+Displays subscription status, plan limits, API request usage, and period dates derived from backend responses.
+
+#### 3. Projects Flow (Day 17)
+```text
+Projects Component → typed API client → GET/POST/PATCH /api/v1/projects → Organization-Scoped Backend Data → Server RBAC Enforcement
+```
+Provides project list, status filtering (`ALL`, `ACTIVE`, `ARCHIVED`), project creation, update, and archiving. Exposes mutation controls to `OWNER`, `ADMIN`, `MANAGER` roles, providing read-only access to `MEMBER` users.
+
+#### 4. Tasks Flow (Day 17)
+```text
+Tasks Component → typed API client → GET/POST/PATCH /api/v1/tasks → Backend Filtering & Role Enforcement → Member Task Scoping
+```
+Provides task listing, project/status filtering using backend query parameters, task creation, update, inline status updates, and inline assignment. Member visibility is enforced by backend Prisma queries (`assigneeId = userId`).
+
+#### 5. Customers & Associations Flow (Day 18)
+```text
+Customers Component → typed API client → GET/POST/PATCH/DELETE /api/v1/customers & /api/v1/customers/:id/projects → Server RBAC Enforcement
+```
+Provides customer CRUD and Customer–Project association management (linking/unlinking projects). Access is restricted to `OWNER`, `ADMIN`, `MANAGER` roles; requests from `MEMBER` users reject with HTTP 403 `INSUFFICIENT_ROLE`, showing a clear access-restricted state in the UI.
+
+#### Security & Authorization Boundaries
+- **Frontend Permission Checks**: UI role checks are for user experience and control visibility.
+- **Authoritative Security Boundary**: Backend RBAC (`requireRole`) remains the strict, authoritative security boundary for every request.
+- **Tenant Isolation**: Enforced by authenticated organization context (`req.user.organizationId`) on the backend. The frontend never supplies an arbitrary organization ID for authorization.
+
 ## 4. Multi-Tenant Data Isolation
 
 FlowSuite enforces strict organization-level data isolation at the backend service layer:
@@ -232,6 +271,8 @@ Implemented audit actions:
 
 ## 7. Testing & Verification Architecture
 
+### Backend Test Architecture
+
 The backend test suite is built with Vitest and focuses on service-level unit tests, middleware validation, route handler testing, and database tenant-isolation integration testing:
 
 - **195 automated tests passing across 20 test files.**
@@ -241,6 +282,15 @@ The backend test suite is built with Vitest and focuses on service-level unit te
 - **Tenant Isolation Integration Tests**: Explicit PostgreSQL integration test (`project.tenant-isolation.integration.test.ts`) asserting that queries attempting to access Organization A project resources using Organization B's context reject with `Project not found`.
 - **Coverage Instrumentation**: Instrumentated via `@vitest/coverage-v8` achieving 89.30% backend statement/line coverage.
 - **Continuous Integration Pipeline**: Validated on GitHub Actions (`.github/workflows/ci.yml`) using a PostgreSQL 16 service container to run migrations (`npx prisma migrate deploy`), execute all 20 test files, and verify production compilation (`npm run build`).
-- **Build Status**: Verified clean compilation via `npm run build` (`tsc`).
 
-Note: Tests consist of service-level unit tests, middleware tests, and route tests (with mocked Prisma, Redis, and Stripe SDKs), alongside an isolated PostgreSQL tenant-isolation integration test (`project.tenant-isolation.integration.test.ts`). No browser end-to-end testing or live Stripe integration tests are included in the test suite.
+### Frontend Test Architecture
+
+The frontend test suite is built with Vitest and React Testing Library (`jsdom` environment):
+
+- **30 automated tests passing across 7 test files.**
+- **Day 16 (4 suites, 12 tests)**: Covers Login (`Login.test.tsx`), Registration (`Register.test.tsx`), Protected Routing (`ProtectedRoute.test.tsx`), and Dashboard (`Dashboard.test.tsx`) rendering and error retry flows.
+- **Day 17 (6 suites, 22 tests)**: Added Projects (`Projects.test.tsx`) and Tasks (`Tasks.test.tsx`) covering CRUD rendering, form validation, role-based mutation control visibility, inline status transitions, and Member visibility restrictions.
+- **Day 18 (7 suites, 30 tests)**: Added Customers (`Customers.test.tsx`) covering customer listing, create/update/delete operations, form validation, Customer–Project association link/unlink actions, and Member access restriction banner (`INSUFFICIENT_ROLE`).
+- **Build Status**: Verified clean frontend production compilation via `npm run build` (`tsc && vite build`).
+
+Note: Tests consist of backend service/middleware/route tests (with mocked Prisma, Redis, and Stripe SDKs), a PostgreSQL tenant-isolation integration test (`project.tenant-isolation.integration.test.ts`), and frontend component unit/integration tests with Vitest and React Testing Library. No browser end-to-end testing or live Stripe API calls are included in the test suite.

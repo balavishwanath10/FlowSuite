@@ -4,9 +4,41 @@
 
 FlowSuite is a production-style B2B SaaS platform designed to provide organizations with isolated workspaces for managing teams, customers, projects, and tasks — backed by role-based access control (RBAC), subscription billing, a flexible feature-entitlement engine, usage limits, and audit logging.
 
-## Current Status — Day 15 Final Testing, CI & Documentation Foundation
+## Current Status — Day 18 Frontend Customers & Customer-Project Association
 
-The repository currently contains the completed **Day 1 foundation, Day 2 database schema, Day 3 authentication, Day 4 organization membership & RBAC, Day 5 project management, Day 6 task management, Day 7 customer management, Day 8 customer ↔ project association, Day 9 organization audit log retrieval, Day 10 subscription & plan entitlement foundation, Day 11 API usage tracking & limits, Day 12 Stripe test-mode billing foundation, Day 13 security hardening, Day 14 backend coverage hardening, and Day 15 final testing & CI foundation**.
+The repository currently contains completed **Day 1 foundation, Day 2 database schema, Day 3 authentication, Day 4 organization membership & RBAC, Day 5 project management, Day 6 task management, Day 7 customer management, Day 8 customer ↔ project association, Day 9 organization audit log retrieval, Day 10 subscription & plan entitlement foundation, Day 11 API usage tracking & limits, Day 12 Stripe test-mode billing foundation, Day 13 security hardening, Day 14 backend coverage hardening, Day 15 final testing & CI foundation, Day 16 frontend authentication & dashboard, Day 17 frontend projects & tasks, and Day 18 frontend customers & customer-project associations**.
+
+### System Verification & Capabilities
+
+The repository contains fully implemented and verified capabilities for:
+- Authentication & JWT/session persistence
+- Organization membership & multi-tier RBAC (`OWNER`, `ADMIN`, `MANAGER`, `MEMBER`)
+- Project management & archiving
+- Task management, assignment, status tracking & Member visibility scoping
+- Customer management & Customer–Project associations
+- Subscription entitlement engine & API request usage tracking/limits
+- Stripe test-mode billing foundation & webhook processing
+- Security hardening & Redis failed-login rate limiting
+- Backend test coverage instrumentation & PostgreSQL tenant-isolation integration testing
+- GitHub Actions CI pipeline
+- Frontend authentication UI (`/login`, `/register`) & AuthContext session management
+- Frontend Organization Dashboard UI (`/`)
+- Frontend Projects UI (`/projects`) & Tasks UI (`/tasks`)
+- Frontend Customers UI (`/customers`) & Customer–Project association management
+
+Current verification state:
+- **30 frontend tests passing across 7 test suites.**
+- **195 backend tests passing across 20 test suites.**
+- **Frontend production build (`tsc && vite build`) passing.**
+- **Backend production build (`tsc`) passing.**
+- **CI workflow configured for test and build verification.**
+
+Remaining PRD implementation tasks:
+- Audit Logs frontend UI (`/audit-logs`)
+- Subscription / Billing frontend UI (`/billing`)
+- Complete API documentation
+- Cloud deployment and deployed URL verification
+- Final PRD acceptance review / walkthrough
 
 ### Day 1 — Foundation
 
@@ -558,6 +590,88 @@ npx prisma studio
 * Configured GitHub Actions CI pipeline (`.github/workflows/ci.yml`) with PostgreSQL 16 service container running migrations, Vitest suite, and TypeScript build.
 * Reached **195 automated tests passing across 20 test files.**
 * Deployment status: **Pending** (production deployment to be executed in upcoming phase).
+
+### Week 4 — Frontend Implementation & Application Shell
+
+#### Day 16 — Frontend Authentication & Dashboard
+
+* Centralized typed frontend API client in `client/src/api/client.ts`.
+* Centralized authentication context in `client/src/context/AuthContext.tsx`.
+* JWT access and refresh token session persistence stored in client storage (`flowsuite_access_token`, `flowsuite_refresh_token`).
+* Automatic session initialization upon application load via `GET /api/v1/auth/me`.
+* User login (`/login`) and organization registration (`/register`) flows with client-side validation aligned with the existing backend validation rules.
+* Protected client routing via `ProtectedRoute` guard redirecting unauthenticated users to `/login`.
+* Authenticated application layout and navigation shell (`Layout`) featuring active route highlighting, organization/user badge, and logout action.
+* Logout flow destroying stored JWT tokens and clearing application user state (`POST /api/v1/auth/logout`).
+* Organization Dashboard implementation (`/`) fetching data from `GET /api/v1/subscription` and `GET /api/v1/usage`.
+* Dashboard displays current plan name, subscription status, seat and project limits, API request usage progress bar, percentage used, and usage-period dates based on backend responses.
+* Safe API error states with single-click retry action.
+* **12 automated frontend tests passing across 4 test suites.**
+* Frontend production build verified (`tsc && vite build`).
+* Backend regression suite verified: **195 tests passing across 20 test suites** and backend build verified (`tsc`).
+* Backend authentication, tenant isolation, and RBAC remain authoritative.
+* Commit `3fc14ea` pushed to `origin/main`.
+
+#### Day 17 — Frontend Projects & Tasks
+
+* **Project Frontend Implementation (`/projects`)**:
+  * Displays organization projects with status badges (`ACTIVE`, `ARCHIVED`), descriptions, and creation dates.
+  * Project creation modal (`POST /api/v1/projects`).
+  * Project update modal (`PATCH /api/v1/projects/:id`).
+  * Project archiving action (`POST /api/v1/projects/:id/archive`).
+  * Status filter tabs (`ALL`, `ACTIVE`, `ARCHIVED`).
+  * Client-side validation for project name (required, max 100 chars) and description (max 500 chars).
+  * Loading, empty, and safe error states with retry action.
+* **Task Frontend Implementation (`/tasks`)**:
+  * Task listing with project badge, task title, description, status, assignee, creation date, and due date when available.
+  * Project and status filtering using backend query parameters (`projectId`, `status`).
+  * Task creation modal (`POST /api/v1/tasks`).
+  * Task editing modal (`PATCH /api/v1/tasks/:id`).
+  * Inline status update dropdown (`PATCH /api/v1/tasks/:id/status`).
+  * Inline task assignment/reassignment dropdown (`PATCH /api/v1/tasks/:id/assign`).
+  * Client-side validation for project selection, task title (required, max 200 chars), and description (max 2000 chars).
+  * Loading, empty, and safe error states.
+* **Server-Side RBAC Reflected in UI**:
+  * `OWNER`, `ADMIN`, `MANAGER`: Access project mutation controls and task creation/assignment controls.
+  * `MEMBER`: Read-only project view according to backend permissions.
+  * `OWNER`, `ADMIN`: Full task update controls.
+  * `MANAGER`: Task creation, assignment, and status updates according to backend permissions.
+  * `MEMBER`: Task status updates only for permitted assigned tasks.
+  * Member task visibility remains strictly enforced by backend query filtering (`assigneeId = userId`), not merely by hiding UI elements.
+* **Typed API Client Additions**: Added typed functions for Projects (`getProjectsApi`, `createProjectApi`, `updateProjectApi`, `archiveProjectApi`), Tasks (`getTasksApi`, `createTaskApi`, `updateTaskApi`, `updateTaskStatusApi`, `assignTaskApi`), and Memberships (`getMembersApi`) in `client/src/api/client.ts`.
+* **Testing & Verification**:
+  * **22 automated frontend tests passing across 6 test suites.**
+  * **195 backend tests passing across 20 test suites.**
+  * Frontend production build passing (`tsc && vite build`).
+  * Backend production build passing (`tsc`).
+  * `git diff --check` passed cleanly.
+  * Commit `954895c` pushed to `origin/main`.
+  * No new backend business logic was introduced during Day 17 frontend work.
+
+#### Day 18 — Frontend Customers & Customer-Project Associations
+
+* **Customers Frontend Implementation (`/customers`)**:
+  * Customer directory listing customer name, email, and phone where available.
+  * Customer creation modal (`POST /api/v1/customers`).
+  * Customer update modal (`PATCH /api/v1/customers/:id`).
+  * Customer deletion action (`DELETE /api/v1/customers/:id`).
+  * Client-side validation with trimmed input, required name, email format check, and phone length check.
+  * Loading, empty, and safe error states.
+  * `MEMBER` Access Restriction: Displays a clear "Access Restricted" message when the backend returns `INSUFFICIENT_ROLE` (HTTP 403).
+* **Customer–Project Association UI**:
+  * Association modal displaying projects linked to a customer (`GET /api/v1/customers/:id/projects`).
+  * Project link control (`POST /api/v1/customers/:id/projects/:projectId`).
+  * Project unlink control (`DELETE /api/v1/customers/:id/projects/:projectId`).
+  * Project selector dropdown uses existing `/api/v1/projects` endpoint, excluding already linked projects to prevent duplicate link attempts.
+  * Backend remains authoritative for organization isolation and RBAC security boundaries.
+* **Typed API Client Additions**: Added typed functions in `client/src/api/client.ts` for `getCustomersApi`, `createCustomerApi`, `updateCustomerApi`, `deleteCustomerApi`, `getCustomerProjectsApi`, `linkCustomerProjectApi`, and `unlinkCustomerProjectApi`.
+* **Testing & Verification**:
+  * **30 automated frontend tests passing across 7 test suites.**
+  * **195 backend tests passing across 20 test suites.**
+  * Frontend production build passing (`tsc && vite build`).
+  * Backend production build passing (`tsc`).
+  * `git diff --check` passed cleanly.
+  * Commit `7caacf3` pushed to `origin/main`.
 
 ## Project Scope
 
