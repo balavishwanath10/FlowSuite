@@ -1,29 +1,77 @@
+import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom';
+import { AuthProvider } from './context/AuthContext';
+import { ProtectedRoute } from './components/ProtectedRoute';
+import { Layout } from './components/Layout';
+import { Login } from './pages/Login';
+import { Register } from './pages/Register';
+import { Dashboard } from './pages/Dashboard';
+import { PlaceholderModule } from './pages/PlaceholderModule';
+
 export default function App() {
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col justify-center items-center p-6">
-      <div className="max-w-md w-full bg-slate-900 border border-slate-800 rounded-xl p-8 shadow-2xl space-y-6">
-        <div className="flex items-center space-x-3">
-          <div className="w-3 h-3 rounded-full bg-emerald-500 animate-pulse" />
-          <h1 className="text-2xl font-bold tracking-tight text-white">FlowSuite</h1>
-        </div>
-        <p className="text-slate-400 text-sm leading-relaxed">
-          Day 1 Foundation established. React + Vite + TypeScript + Tailwind CSS client initialized.
-        </p>
-        <div className="border-t border-slate-800 pt-4 space-y-2">
-          <div className="flex justify-between text-xs font-mono text-slate-400">
-            <span>Client Framework:</span>
-            <span className="text-sky-400">React 18 + Vite</span>
-          </div>
-          <div className="flex justify-between text-xs font-mono text-slate-400">
-            <span>Styling:</span>
-            <span className="text-sky-400">Tailwind CSS</span>
-          </div>
-          <div className="flex justify-between text-xs font-mono text-slate-400">
-            <span>Status:</span>
-            <span className="text-emerald-400">Ready for development</span>
-          </div>
-        </div>
-      </div>
-    </div>
+    <AuthProvider>
+      <BrowserRouter>
+        <Routes>
+          {/* Public Authentication Routes */}
+          <Route path="/login" element={<Login />} />
+          <Route path="/register" element={<Register />} />
+
+          {/* Protected Application Routes */}
+          <Route element={<ProtectedRoute />}>
+            <Route element={<Layout />}>
+              <Route path="/" element={<Dashboard />} />
+              <Route
+                path="/projects"
+                element={
+                  <PlaceholderModule
+                    title="Projects Management"
+                    description="Project CRUD operations, status management, and member visibility permissions are backend-enforced under /api/v1/projects."
+                  />
+                }
+              />
+              <Route
+                path="/tasks"
+                element={
+                  <PlaceholderModule
+                    title="Task Operations"
+                    description="Task assignment, status transitions, and Member assigned-task filters are backend-enforced under /api/v1/tasks."
+                  />
+                }
+              />
+              <Route
+                path="/customers"
+                element={
+                  <PlaceholderModule
+                    title="Customer Directory"
+                    description="Organization customer CRUD and customer-project association endpoints are backend-enforced under /api/v1/customers."
+                  />
+                }
+              />
+              <Route
+                path="/audit-logs"
+                element={
+                  <PlaceholderModule
+                    title="Organization Audit Logs"
+                    description="Paginated and filtered system audit log retrieval is backend-enforced for OWNER and ADMIN roles under /api/v1/audit-logs."
+                  />
+                }
+              />
+              <Route
+                path="/billing"
+                element={
+                  <PlaceholderModule
+                    title="Subscription & Billing Management"
+                    description="Stripe test-mode checkout session generation and plan upgrades are backend-enforced under /api/v1/billing/checkout."
+                  />
+                }
+              />
+            </Route>
+          </Route>
+
+          {/* Fallback Route */}
+          <Route path="*" element={<Navigate to="/" replace />} />
+        </Routes>
+      </BrowserRouter>
+    </AuthProvider>
   );
 }
