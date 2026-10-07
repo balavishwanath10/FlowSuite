@@ -7,6 +7,7 @@ import { Register } from './pages/Register';
 import { Dashboard } from './pages/Dashboard';
 import { Projects } from './pages/Projects';
 import { Tasks } from './pages/Tasks';
+import { Customers } from './pages/Customers';
 import { PlaceholderModule } from './pages/PlaceholderModule';
 
 export default function App() {
@@ -24,15 +25,7 @@ export default function App() {
               <Route path="/" element={<Dashboard />} />
               <Route path="/projects" element={<Projects />} />
               <Route path="/tasks" element={<Tasks />} />
-              <Route
-                path="/customers"
-                element={
-                  <PlaceholderModule
-                    title="Customer Directory"
-                    description="Organization customer CRUD and customer-project association endpoints are backend-enforced under /api/v1/customers."
-                  />
-                }
-              />
+              <Route path="/customers" element={<Customers />} />
               <Route
                 path="/audit-logs"
                 element={

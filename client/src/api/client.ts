@@ -323,3 +323,85 @@ export async function getMembersApi(token: string) {
     members: Member[];
   }>('/memberships', { method: 'GET' }, token);
 }
+
+/* ==========================================================================
+   DAY 18: CUSTOMERS & CUSTOMER-PROJECT ASSOCIATION API CONTRACTS
+   ========================================================================== */
+
+export interface Customer {
+  id: string;
+  organizationId: string;
+  name: string;
+  email: string | null;
+  phone: string | null;
+  createdAt: string;
+  updatedAt: string;
+  projects?: Project[];
+}
+
+export async function getCustomersApi(token: string) {
+  return request<{
+    code: string;
+    customers: Customer[];
+  }>('/customers', { method: 'GET' }, token);
+}
+
+export async function createCustomerApi(
+  data: { name: string; email?: string | null; phone?: string | null },
+  token: string,
+) {
+  return request<{
+    code: string;
+    message: string;
+    customer: Customer;
+  }>('/customers', { method: 'POST', body: JSON.stringify(data) }, token);
+}
+
+export async function updateCustomerApi(
+  customerId: string,
+  data: { name?: string; email?: string | null; phone?: string | null },
+  token: string,
+) {
+  return request<{
+    code: string;
+    message: string;
+    customer: Customer;
+  }>(`/customers/${customerId}`, { method: 'PATCH', body: JSON.stringify(data) }, token);
+}
+
+export async function deleteCustomerApi(customerId: string, token: string) {
+  return request<{
+    code: string;
+    message: string;
+  }>(`/customers/${customerId}`, { method: 'DELETE' }, token);
+}
+
+export async function getCustomerProjectsApi(customerId: string, token: string) {
+  return request<{
+    code: string;
+    projects: Project[];
+  }>(`/customers/${customerId}/projects`, { method: 'GET' }, token);
+}
+
+export async function linkCustomerProjectApi(
+  customerId: string,
+  projectId: string,
+  token: string,
+) {
+  return request<{
+    code: string;
+    message: string;
+    customer: Customer;
+  }>(`/customers/${customerId}/projects/${projectId}`, { method: 'POST' }, token);
+}
+
+export async function unlinkCustomerProjectApi(
+  customerId: string,
+  projectId: string,
+  token: string,
+) {
+  return request<{
+    code: string;
+    message: string;
+  }>(`/customers/${customerId}/projects/${projectId}`, { method: 'DELETE' }, token);
+}
