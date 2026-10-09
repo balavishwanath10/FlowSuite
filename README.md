@@ -31,7 +31,7 @@ The repository contains fully implemented and verified capabilities for:
 
 Current verification state:
 - **47 automated frontend tests passing across 9 test files.**
-- **203 automated backend tests passing across 21 test files.**
+- **215 automated backend tests passing across 21 test files.**
 - **Frontend production build (`tsc && vite build`) passing.**
 - **Backend production build (`tsc`) passing.**
 - **CI workflow configured for test and build verification.**
@@ -204,7 +204,7 @@ Remaining Work and Requirements to Confirm:
 
 * **Coverage Instrumentation**: Configured `@vitest/coverage-v8` for backend coverage tracking (`coverage/` ignored in `.gitignore`).
 * **Authentication Middleware Coverage**: Added dedicated unit test suite in `server/src/middleware/__tests__/auth.middleware.test.ts` covering missing Authorization header, non-Bearer headers, valid Bearer tokens, invalid tokens, and expired tokens.
-* **Coverage Results**: Reached 89.30% Statements, 75.57% Branches, 93.97% Functions, and 89.30% Lines across the backend codebase, exceeding the PRD requirement of >=70%.
+* **Coverage Results**: Reached 89.91% Statements, 76.47% Branches, 94.38% Functions, and 89.89% Lines across the backend codebase, exceeding the PRD requirement of >=70%.
 * **Day 14 Milestone**: Verified with 194 tests passing across 19 test suites.
 
 ### Day 15 — Final Testing, Tenant Isolation & Continuous Integration
@@ -411,7 +411,7 @@ Current test coverage includes:
 
 Note: The test suite consists of service-level unit tests, middleware tests, and route tests (with mocked Prisma, Redis, and Stripe SDKs), alongside an isolated PostgreSQL tenant-isolation integration test (`project.tenant-isolation.integration.test.ts`).
 
-**Current result: 203 automated tests passing across 21 test files.**
+**Current result: 215 automated tests passing across 21 test files.**
 **Build status: `npm run build` passing cleanly.**
 
 ## Database
@@ -584,7 +584,7 @@ npx prisma studio
 
 * Installed `@vitest/coverage-v8` instrumentation.
 * Created `server/src/middleware/__tests__/auth.middleware.test.ts` to test all authentication states.
-* Reached 89.30% backend statement/line coverage (exceeding PRD requirement of >=70%).
+* Reached 89.91% backend statement/line coverage (exceeding PRD requirement of >=70%).
 * **194 automated tests passing across 19 test suites.**
 
 #### Day 15 — Tenant-Isolation Integration Testing, CI & Documentation
@@ -709,7 +709,7 @@ npx prisma studio
   * Includes `"Refresh Subscription"` button calling `fetchData(true)` to re-query `GET /api/v1/subscription` and `GET /api/v1/usage`.
 * **Testing & Verification**:
   * **9 automated frontend tests passing** in `client/src/__tests__/Billing.test.tsx` (rendering, OWNER checkout redirect, ADMIN disabled buttons, MANAGER/MEMBER access restriction, neutral return notice, catalog error state, retry, N/A placeholders). Total frontend suite: **47 tests passing across 9 test files**.
-  * **8 automated backend tests passing** in `server/src/routes/__tests__/subscription.routes.test.ts` (registered middleware chain `authenticate → enforceApiUsageLimit → requireRole('OWNER', 'ADMIN') → handler`, `priceInPaise ASC` ordering, explicit field projection, OWNER/ADMIN access, MEMBER rejection without DB access, and DB error handling). Total backend suite: **203 tests passing across 21 test files**.
+  * **8 automated backend tests passing** in `server/src/routes/__tests__/subscription.routes.test.ts` (registered middleware chain `authenticate → enforceApiUsageLimit → requireRole('OWNER', 'ADMIN') → handler`, `priceInPaise ASC` ordering, explicit field projection, OWNER/ADMIN access, MEMBER rejection without DB access, and DB error handling). Total backend suite: **215 tests passing across 21 test files**.
 
 #### Day 21 — Documentation Synchronization & PRD Gap Audit
 

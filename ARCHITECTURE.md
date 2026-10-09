@@ -138,7 +138,7 @@ Failed login attempts are rate-limited via Redis (`login-rate-limit.service.ts`)
 
 ### Coverage & Test Architecture (Day 14)
 
-Backend code coverage is instrumented using `@vitest/coverage-v8`. Dedicated authentication middleware coverage was added in `auth.middleware.test.ts` for missing Authorization headers, non-Bearer authorization, valid Bearer tokens, invalid tokens, and expired tokens, ensuring overall statement/line coverage exceeds 89.30% (satisfying the PRD requirement of $\ge 70\%$).
+Backend code coverage is instrumented using `@vitest/coverage-v8`. Dedicated authentication middleware coverage was added in `auth.middleware.test.ts` for missing Authorization headers, non-Bearer authorization, valid Bearer tokens, invalid tokens, and expired tokens, ensuring overall statement/line coverage exceeds 89.91% (satisfying the PRD requirement of $\ge 70\%$).
 
 ### Continuous Integration & Integration Testing Flow (Day 15)
 
@@ -288,12 +288,12 @@ Implemented audit actions:
 
 The backend test suite is built with Vitest and focuses on service-level unit tests, middleware validation, route handler testing, and database tenant-isolation integration testing:
 
-- **203 automated tests passing across 21 test files.**
+- **215 automated tests passing across 21 test files.**
 - **Service Unit Tests**: Cover authentication, registration, login, refresh, password reset, membership/invitations, project CRUD, task CRUD, assignment validation, customer CRUD, customer-project associations, audit log retrieval, subscription entitlements, API usage tracking, failed-login rate limiting, and Stripe test-mode billing service (`stripe.service.ts`).
 - **Middleware Unit Tests**: Validate authentication (`auth.middleware.test.ts`), RBAC (`rbac.middleware.test.ts`), and API usage limit enforcement (`usage.middleware.test.ts`).
 - **Route & Integration Tests**: Subscription route tests (`subscription.routes.test.ts`) exercising registered middleware chain `authenticate → enforceApiUsageLimit → requireRole('OWNER', 'ADMIN') → handler` with explicit field mapping, billing route tests (`billing.routes.test.ts`), auth route tests (`auth.routes.test.ts`), and PostgreSQL tenant-isolation integration test (`project.tenant-isolation.integration.test.ts`).
 - **RBAC & Visibility Tests**: Test exact role permission boundaries for `OWNER`, `ADMIN`, `MANAGER`, and `MEMBER`, including Member project and task visibility scoping, total Member denial on Customer routes, `OWNER`/`ADMIN`-only access on Audit Log/Subscription/Usage endpoints, and `OWNER`-only access on Billing checkout endpoints.
-- **Coverage Instrumentation**: Instrumentated via `@vitest/coverage-v8` achieving 89.30% backend statement/line coverage.
+- **Coverage Instrumentation**: Instrumentated via `@vitest/coverage-v8` achieving 89.91% backend statement/line coverage.
 - **Continuous Integration Pipeline**: Validated on GitHub Actions (`.github/workflows/ci.yml`) using a PostgreSQL 16 service container to run migrations (`npx prisma migrate deploy`), execute all 21 test files, and verify production compilation (`npm run build`).
 
 ### Frontend Test Architecture
