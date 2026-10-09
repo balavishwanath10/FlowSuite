@@ -33,6 +33,53 @@ services:
       timeout: 5s
       retries: 5
 
+  server:
+    build:
+      context: ./server
+      dockerfile: Dockerfile
+    container_name: flowsuite-server
+    restart: unless-stopped
+    ports:
+      - "5000:5000"
+    environment:
+      PORT: 5000
+      NODE_ENV: production
+      CLIENT_URL: http://localhost:8080
+      DATABASE_URL: postgresql://postgres:postgres@postgres:5432/flowsuite?schema=public
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      JWT_ACCESS_SECRET: ${JWT_ACCESS_SECRET:-flowsuite-access-secret-key-change-in-prod}
+      JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET:-flowsuite-refresh-secret-key-change-in-prod}
+      JWT_ACCESS_EXPIRES_IN: 15m
+      JWT_REFRESH_EXPIRES_IN: 7d
+      STRIPE_SECRET_KEY: ${STRIPE_SECRET_KEY:-sk_test_placeholder}
+      STRIPE_WEBHOOK_SECRET: ${STRIPE_WEBHOOK_SECRET:-whsec_placeholder}
+      STRIPE_STARTER_PRICE_ID: ${STRIPE_STARTER_PRICE_ID:-price_starter_test}
+      STRIPE_PROFESSIONAL_PRICE_ID: ${STRIPE_PROFESSIONAL_PRICE_ID:-price_prof_test}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O - http://localhost:5000/api/v1/health | grep status || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+
+  client:
+    build:
+      context: ./client
+      dockerfile: Dockerfile
+    container_name: flowsuite-client
+    restart: unless-stopped
+    ports:
+      - "8080:80"
+    depends_on:
+      server:
+        condition: service_healthy
+
 volumes:
   postgres_data:
   redis_data:
