@@ -182,6 +182,18 @@ Customers Component → typed API client → GET/POST/PATCH/DELETE /api/v1/custo
 ```
 Provides customer CRUD and Customer–Project association management (linking/unlinking projects). Access is restricted to `OWNER`, `ADMIN`, `MANAGER` roles; requests from `MEMBER` users reject with HTTP 403 `INSUFFICIENT_ROLE`, showing a clear access-restricted state in the UI.
 
+#### 6. Audit Logs Flow (Day 19)
+```text
+AuditLogs Component → typed API client → GET /api/v1/audit-logs → Server RBAC Enforcement → Bounded Pagination & Filtering
+```
+Provides read-only audit log display with 20 logs per page, action dropdown filter, and actor dropdown filter. Access is restricted to `OWNER` and `ADMIN` roles; requests from `MANAGER` and `MEMBER` roles display an "Access Restricted" alert banner upon HTTP 403 `INSUFFICIENT_ROLE`.
+
+#### 7. Subscription & Billing Flow (Day 20)
+```text
+Billing Component → typed API client → GET /api/v1/subscription + GET /api/v1/usage + GET /api/v1/subscription/plans + POST /api/v1/billing/checkout → Stripe Checkout Redirect & Neutral Return Notice
+```
+Provides Subscription Overview, API Usage Overview with visual progress bar, and Plan Selection cards driven by `GET /api/v1/subscription/plans`. `OWNER` role can initiate Stripe test-mode checkout via `POST /api/v1/billing/checkout`, redirecting to `res.url`. Returning from checkout with `session_id` displays a neutral notice with a `"Refresh Subscription"` action button to reload subscription and usage data from backend APIs.
+
 #### Security & Authorization Boundaries
 - **Frontend Permission Checks**: UI role checks are for user experience and control visibility.
 - **Authoritative Security Boundary**: Backend RBAC (`requireRole`) remains the strict, authoritative security boundary for every request.
@@ -252,6 +264,7 @@ FlowSuite implements a four-tier server-side RBAC authorization model (`OWNER`, 
 | Operation | OWNER | ADMIN | MANAGER | MEMBER |
 | :--- | :---: | :---: | :---: | :---: |
 | **Get Subscription & Plan Entitlements** | Yes | Yes | No | No |
+| **Get Subscription Plans Catalog** | Yes | Yes | No | No |
 | **Get API Request Usage Status** | Yes | Yes | No | No |
 | **Create Stripe Checkout Session** | Yes | No | No | No |
 
@@ -275,22 +288,24 @@ Implemented audit actions:
 
 The backend test suite is built with Vitest and focuses on service-level unit tests, middleware validation, route handler testing, and database tenant-isolation integration testing:
 
-- **195 automated tests passing across 20 test files.**
+- **203 automated tests passing across 21 test files.**
 - **Service Unit Tests**: Cover authentication, registration, login, refresh, password reset, membership/invitations, project CRUD, task CRUD, assignment validation, customer CRUD, customer-project associations, audit log retrieval, subscription entitlements, API usage tracking, failed-login rate limiting, and Stripe test-mode billing service (`stripe.service.ts`).
 - **Middleware Unit Tests**: Validate authentication (`auth.middleware.test.ts`), RBAC (`rbac.middleware.test.ts`), and API usage limit enforcement (`usage.middleware.test.ts`).
+- **Route & Integration Tests**: Subscription route tests (`subscription.routes.test.ts`) exercising registered middleware chain `authenticate → enforceApiUsageLimit → requireRole('OWNER', 'ADMIN') → handler` with explicit field mapping, billing route tests (`billing.routes.test.ts`), auth route tests (`auth.routes.test.ts`), and PostgreSQL tenant-isolation integration test (`project.tenant-isolation.integration.test.ts`).
 - **RBAC & Visibility Tests**: Test exact role permission boundaries for `OWNER`, `ADMIN`, `MANAGER`, and `MEMBER`, including Member project and task visibility scoping, total Member denial on Customer routes, `OWNER`/`ADMIN`-only access on Audit Log/Subscription/Usage endpoints, and `OWNER`-only access on Billing checkout endpoints.
-- **Tenant Isolation Integration Tests**: Explicit PostgreSQL integration test (`project.tenant-isolation.integration.test.ts`) asserting that queries attempting to access Organization A project resources using Organization B's context reject with `Project not found`.
 - **Coverage Instrumentation**: Instrumentated via `@vitest/coverage-v8` achieving 89.30% backend statement/line coverage.
-- **Continuous Integration Pipeline**: Validated on GitHub Actions (`.github/workflows/ci.yml`) using a PostgreSQL 16 service container to run migrations (`npx prisma migrate deploy`), execute all 20 test files, and verify production compilation (`npm run build`).
+- **Continuous Integration Pipeline**: Validated on GitHub Actions (`.github/workflows/ci.yml`) using a PostgreSQL 16 service container to run migrations (`npx prisma migrate deploy`), execute all 21 test files, and verify production compilation (`npm run build`).
 
 ### Frontend Test Architecture
 
 The frontend test suite is built with Vitest and React Testing Library (`jsdom` environment):
 
-- **30 automated tests passing across 7 test files.**
+- **47 automated tests passing across 9 test files.**
 - **Day 16 (4 suites, 12 tests)**: Covers Login (`Login.test.tsx`), Registration (`Register.test.tsx`), Protected Routing (`ProtectedRoute.test.tsx`), and Dashboard (`Dashboard.test.tsx`) rendering and error retry flows.
 - **Day 17 (6 suites, 22 tests)**: Added Projects (`Projects.test.tsx`) and Tasks (`Tasks.test.tsx`) covering CRUD rendering, form validation, role-based mutation control visibility, inline status transitions, and Member visibility restrictions.
 - **Day 18 (7 suites, 30 tests)**: Added Customers (`Customers.test.tsx`) covering customer listing, create/update/delete operations, form validation, Customer–Project association link/unlink actions, and Member access restriction banner (`INSUFFICIENT_ROLE`).
+- **Day 19 (8 suites, 38 tests)**: Added Audit Logs (`AuditLogs.test.tsx`) covering audit log rendering, pagination, action/actor filters, empty state, retry flow, and `OWNER`/`ADMIN` role guards.
+- **Day 20 (9 suites, 47 tests)**: Added Billing (`Billing.test.tsx`) covering subscription/usage rendering, plan catalog cards from `GET /api/v1/subscription/plans`, `OWNER` checkout redirect, `ADMIN` disabled upgrade buttons, `MANAGER`/`MEMBER` access restriction, catalog error handling with retry, neutral Stripe return notice with manual refresh, and `N/A` placeholders.
 - **Build Status**: Verified clean frontend production compilation via `npm run build` (`tsc && vite build`).
 
 Note: Tests consist of backend service/middleware/route tests (with mocked Prisma, Redis, and Stripe SDKs), a PostgreSQL tenant-isolation integration test (`project.tenant-isolation.integration.test.ts`), and frontend component unit/integration tests with Vitest and React Testing Library. No browser end-to-end testing or live Stripe API calls are included in the test suite.

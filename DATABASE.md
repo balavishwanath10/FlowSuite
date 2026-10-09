@@ -214,8 +214,11 @@ Indexes defined in the Prisma schema include:
 * **Day 16 Status**: Day 16 required **no database schema changes or migrations**, as frontend-only authentication and organization dashboard work consumes existing backend authentication, `Subscription`, and `UsageCounter` endpoints.
 * **Day 17 Status**: Day 17 required **no database schema changes or migrations**, as frontend-only Projects and Tasks work consumes existing `Project`, `Task`, `Membership`, and `Organization` relationships.
 * **Day 18 Status**: Day 18 required **no database schema changes or migrations**, as frontend-only Customers and Customer-Project association work consumes existing `Customer`, `Project`, `Organization`, and implicit `Customer.projects <-> Project.customers` relationships.
+* **Day 19 Status**: Day 19 required **no database schema changes or migrations**, as frontend audit log work consumes the existing `GET /api/v1/audit-logs` endpoint over the Day 2 `AuditLog` model.
+* **Day 20 Status**: Day 20 required **no database schema changes or migrations**, as `GET /api/v1/subscription/plans` operates over the existing `Plan` model, and frontend billing UI consumes existing `Subscription`, `Plan`, and `UsageCounter` endpoints.
+* **Day 21 Status**: Day 21 required **no database schema changes or migrations**, as it consists of documentation completion and PRD gap audit.
 
-### Summary of Days 16–18 Database Changes
+### Summary of Days 16–21 Database Changes
 - **No new tables** were created.
 - **No new columns** were added.
 - **No new indexes** were created.

@@ -4,9 +4,9 @@
 
 FlowSuite is a production-style B2B SaaS platform designed to provide organizations with isolated workspaces for managing teams, customers, projects, and tasks — backed by role-based access control (RBAC), subscription billing, a flexible feature-entitlement engine, usage limits, and audit logging.
 
-## Current Status — Day 18 Frontend Customers & Customer-Project Association
+## Current Status — Day 21 Documentation Completion & PRD Gap Audit
 
-The repository currently contains completed **Day 1 foundation, Day 2 database schema, Day 3 authentication, Day 4 organization membership & RBAC, Day 5 project management, Day 6 task management, Day 7 customer management, Day 8 customer ↔ project association, Day 9 organization audit log retrieval, Day 10 subscription & plan entitlement foundation, Day 11 API usage tracking & limits, Day 12 Stripe test-mode billing foundation, Day 13 security hardening, Day 14 backend coverage hardening, Day 15 final testing & CI foundation, Day 16 frontend authentication & dashboard, Day 17 frontend projects & tasks, and Day 18 frontend customers & customer-project associations**.
+The repository currently contains completed **Day 1 foundation, Day 2 database schema, Day 3 authentication, Day 4 organization membership & RBAC, Day 5 project management, Day 6 task management, Day 7 customer management, Day 8 customer ↔ project association, Day 9 organization audit log retrieval, Day 10 subscription & plan entitlement foundation, Day 11 API usage tracking & limits, Day 12 Stripe test-mode billing foundation, Day 13 security hardening, Day 14 backend coverage hardening, Day 15 final testing & CI foundation, Day 16 frontend authentication & dashboard, Day 17 frontend projects & tasks, Day 18 frontend customers & customer-project associations, Day 19 frontend audit logs, Day 20 frontend subscription & billing UI, and Day 21 documentation completion & PRD gap audit**.
 
 ### System Verification & Capabilities
 
@@ -17,7 +17,7 @@ The repository contains fully implemented and verified capabilities for:
 - Task management, assignment, status tracking & Member visibility scoping
 - Customer management & Customer–Project associations
 - Subscription entitlement engine & API request usage tracking/limits
-- Stripe test-mode billing foundation & webhook processing
+- Stripe test-mode billing foundation, checkout session generation & webhook processing
 - Security hardening & Redis failed-login rate limiting
 - Backend test coverage instrumentation & PostgreSQL tenant-isolation integration testing
 - GitHub Actions CI pipeline
@@ -25,19 +25,20 @@ The repository contains fully implemented and verified capabilities for:
 - Frontend Organization Dashboard UI (`/`)
 - Frontend Projects UI (`/projects`) & Tasks UI (`/tasks`)
 - Frontend Customers UI (`/customers`) & Customer–Project association management
+- Frontend Audit Logs UI (`/audit-logs`) with pagination, action/actor filters & OWNER/ADMIN access
+- Frontend Subscription & Billing UI (`/billing`) with plan catalog (`GET /api/v1/subscription/plans`), OWNER checkout redirect, neutral return notice & subscription refresh
+- Synchronized documentation & PRD gap audit (Day 21)
 
 Current verification state:
-- **30 frontend tests passing across 7 test suites.**
-- **195 backend tests passing across 20 test suites.**
+- **47 automated frontend tests passing across 9 test files.**
+- **203 automated backend tests passing across 21 test files.**
 - **Frontend production build (`tsc && vite build`) passing.**
 - **Backend production build (`tsc`) passing.**
 - **CI workflow configured for test and build verification.**
 
-Remaining PRD implementation tasks:
-- Audit Logs frontend UI (`/audit-logs`)
-- Subscription / Billing frontend UI (`/billing`)
-- Complete API documentation
+Remaining Work and Requirements to Confirm:
 - Cloud deployment and deployed URL verification
+- OpenAPI / Swagger formal specification document generation (formal API-specification gap whose requirement status needs confirmation against the authoritative PRD)
 - Final PRD acceptance review / walkthrough
 
 ### Day 1 — Foundation
@@ -362,6 +363,7 @@ http://localhost:5173
 | Method | Endpoint | Permitted Roles | Purpose |
 | ------ | -------- | --------------- | ------- |
 | GET | `/api/v1/subscription` | OWNER, ADMIN | Retrieve organization subscription details & plan entitlements |
+| GET | `/api/v1/subscription/plans` | OWNER, ADMIN | Retrieve available subscription plans catalog |
 | GET | `/api/v1/usage` | OWNER, ADMIN | Retrieve organization API request usage and limit status |
 | POST | `/api/v1/billing/checkout` | OWNER | Create Stripe test-mode Checkout Session for plan upgrade |
 | POST | `/api/v1/billing/webhook` | Public (Stripe Signature) | Receive and process Stripe test-mode webhook events |
@@ -399,6 +401,7 @@ Current test coverage includes:
 * Customer ↔ Project association (linking, unlinking, and listing customer projects).
 * Organization audit log retrieval (pagination, action/actor filtering, and RBAC guards).
 * Subscription entitlement retrieval & limit checking (seats, projects, API request limits, analytics).
+* Subscription plans catalog retrieval (`GET /api/v1/subscription/plans`) and subscription route middleware chain testing (`subscription.routes.test.ts`).
 * API usage tracking, billing period rollover, and API request limit enforcement.
 * Stripe test-mode customer creation, checkout session generation, webhook handling, and audit logging.
 * Redis-backed failed-login rate limiting and authentication input validation.
@@ -408,7 +411,7 @@ Current test coverage includes:
 
 Note: The test suite consists of service-level unit tests, middleware tests, and route tests (with mocked Prisma, Redis, and Stripe SDKs), alongside an isolated PostgreSQL tenant-isolation integration test (`project.tenant-isolation.integration.test.ts`).
 
-**Current result: 195 automated tests passing across 20 test files.**
+**Current result: 203 automated tests passing across 21 test files.**
 **Build status: `npm run build` passing cleanly.**
 
 ## Database
@@ -672,6 +675,51 @@ npx prisma studio
   * Backend production build passing (`tsc`).
   * `git diff --check` passed cleanly.
   * Commit `7caacf3` pushed to `origin/main`.
+
+#### Day 19 — Audit Logs Frontend
+
+* **Audit Logs Page (`/audit-logs`)**: Implemented functional read-only Audit Logs screen mounted under `ProtectedRoute` and `Layout` in `App.tsx`.
+* **Data Retrieval**: Communicates with existing backend endpoint `GET /api/v1/audit-logs` via `getAuditLogsApi` in `client/src/api/client.ts`.
+* **Pagination & Filtering**:
+  * Bounded pagination (20 logs per page) driven by backend pagination metadata (`page`, `totalPages`, `total`).
+  * Action dropdown filter (`action` query param) supporting system audit actions (`PROJECT_CREATED`, `TASK_CREATED`, `MEMBER_INVITED`, `CUSTOMER_CREATED`, etc.).
+  * Actor dropdown filter (`actorId` query param) populated dynamically via `getMembersApi`.
+  * Single-click "Clear Filters" action resetting pagination and filter criteria.
+* **User Interface States**: Includes skeleton loader during fetch, empty state (`"No audit logs found."`), and safe error alert with a `"Retry"` button.
+* **RBAC Enforcement**: `OWNER` and `ADMIN` roles view audit logs. `MANAGER` and `MEMBER` roles receive an "Access Restricted" alert banner when access is denied by role check or HTTP 403 `INSUFFICIENT_ROLE`.
+* **Testing & Verification**:
+  * **8 automated frontend tests passing** in `client/src/__tests__/AuditLogs.test.tsx` (pagination, filtering, empty state, API retry, and RBAC guards).
+
+#### Day 20 — Subscription & Billing Frontend UI & Plan Catalog API
+
+* **Billing Page (`/billing`)**: Replaced `PlaceholderModule` with functional `<Billing />` screen in `client/src/pages/Billing.tsx`.
+* **Plan Catalog API (`GET /api/v1/subscription/plans`)**: Added read-only backend endpoint returning seeded subscription plans mapped to explicit public fields (`id`, `name`, `priceInPaise`, `seatLimit`, `projectLimit`, `apiRequestLimit`, `advancedAnalytics`) ordered by `priceInPaise ASC`. Internal DB fields (`stripePriceId`, `createdAt`, `updatedAt`) are stripped before returning.
+* **Subscription & Usage Cards**:
+  * Subscription Overview card rendering plan name, status badge (`ACTIVE`), price in INR (`formatCurrency`), billing cycle period dates, seat limit, project limit, API request limit, and analytics entitlement. Displays `'N/A'` placeholders when backend response fields are missing.
+  * API Usage Overview card rendering consumed requests vs limit (`apiRequests / apiRequestLimit`), progress bar with color thresholds (green <80%, amber 80–95%, red ≥95%), percentage used, and period reset date.
+* **Plan Selection & Checkout**:
+  * Renders Free, Starter, and Professional plan cards driven strictly by `GET /api/v1/subscription/plans`.
+  * Disables non-purchasable Free plans and marks active plan as "Current Plan".
+  * Exposes "Upgrade to [Plan]" button for `OWNER` role, calling `POST /api/v1/billing/checkout` and redirecting user via `window.location.href = res.url`.
+  * Disables upgrade buttons with title `"Upgrade (Owner Only)"` for `ADMIN` role.
+  * Displays "Access Restricted" alert banner for `MANAGER`/`MEMBER` roles (or on HTTP 403 `INSUFFICIENT_ROLE`).
+* **Catalog Failure & Return Handling**:
+  * If `getPlansApi` fails or returns an empty array, renders a catalog error state (`"Subscription plans catalog is currently unavailable."`) with a `"Retry Loading Plans"` button. Checkout buttons with fabricated IDs are not rendered when catalog is unavailable.
+  * Detects `session_id` query parameter on return from Stripe Checkout and displays neutral notice: *"You've returned from Stripe Checkout. Your subscription status will reflect the backend's verified update when checkout processing is complete."*
+  * Includes `"Refresh Subscription"` button calling `fetchData(true)` to re-query `GET /api/v1/subscription` and `GET /api/v1/usage`.
+* **Testing & Verification**:
+  * **9 automated frontend tests passing** in `client/src/__tests__/Billing.test.tsx` (rendering, OWNER checkout redirect, ADMIN disabled buttons, MANAGER/MEMBER access restriction, neutral return notice, catalog error state, retry, N/A placeholders). Total frontend suite: **47 tests passing across 9 test files**.
+  * **8 automated backend tests passing** in `server/src/routes/__tests__/subscription.routes.test.ts` (registered middleware chain `authenticate → enforceApiUsageLimit → requireRole('OWNER', 'ADMIN') → handler`, `priceInPaise ASC` ordering, explicit field projection, OWNER/ADMIN access, MEMBER rejection without DB access, and DB error handling). Total backend suite: **203 tests passing across 21 test files**.
+
+#### Day 21 — Documentation Synchronization & PRD Gap Audit
+
+* **Documentation Synchronization**: Updated `README.md`, `ARCHITECTURE.md`, and `DATABASE.md` to reflect full implementation through Day 20.
+* **PRD Gap Audit**: Performed comprehensive audit comparing repository implementation against project documentation. Note: No standalone PRD file (`PRD.md`) was found in the repository directory; audit status reflects empirical verification against source code, endpoint contracts, schema models, and existing documentation.
+* **Source Code & Test Verification**: Source code and automated test suites confirm implementation for authentication, multi-tenant isolation, project management, task management, customer management, customer-project associations, audit log retrieval, subscription entitlements, API request limit enforcement, Stripe test-mode billing foundation & webhook handling, security hardening (Redis login rate limiting), test coverage instrumentation (89.3% statement coverage), CI pipeline, and full frontend SPA modules (Login, Register, Dashboard, Projects, Tasks, Customers, Audit Logs, Billing). Final PRD acceptance review remains pending.
+* **Identified Remaining Gaps**:
+  * Cloud deployment to production hosting environments and deployed URL verification remain pending.
+  * OpenAPI / Swagger formal API specification document generation remains a formal API-specification gap whose requirement status needs confirmation against the authoritative PRD.
+  * Live Stripe production payment processing remains pending (test-mode integration complete).
 
 ## Project Scope
 
