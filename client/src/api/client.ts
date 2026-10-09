@@ -455,3 +455,39 @@ export async function getAuditLogsApi(
     pagination: AuditLogPagination;
   }>(`/audit-logs${queryString}`, { method: 'GET' }, token);
 }
+
+/* ==========================================================================
+   DAY 20: BILLING & SUBSCRIPTION API CONTRACTS
+   ========================================================================== */
+
+export interface Plan {
+  id: string;
+  name: string;
+  priceInPaise: number;
+  seatLimit: number;
+  projectLimit: number | null;
+  apiRequestLimit: number;
+  advancedAnalytics: boolean;
+}
+
+export async function getPlansApi(token: string) {
+  return request<{
+    code: string;
+    plans: Plan[];
+  }>('/subscription/plans', { method: 'GET' }, token);
+}
+
+export async function createCheckoutSessionApi(planId: string, token: string) {
+  return request<{
+    code: string;
+    sessionId: string;
+    url: string;
+  }>(
+    '/billing/checkout',
+    {
+      method: 'POST',
+      body: JSON.stringify({ planId }),
+    },
+    token,
+  );
+}

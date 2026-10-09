@@ -9,7 +9,7 @@ import { Projects } from './pages/Projects';
 import { Tasks } from './pages/Tasks';
 import { Customers } from './pages/Customers';
 import { AuditLogs } from './pages/AuditLogs';
-import { PlaceholderModule } from './pages/PlaceholderModule';
+import { Billing } from './pages/Billing';
 
 export default function App() {
   return (
@@ -28,15 +28,7 @@ export default function App() {
               <Route path="/tasks" element={<Tasks />} />
               <Route path="/customers" element={<Customers />} />
               <Route path="/audit-logs" element={<AuditLogs />} />
-              <Route
-                path="/billing"
-                element={
-                  <PlaceholderModule
-                    title="Subscription & Billing Management"
-                    description="Stripe test-mode checkout session generation and plan upgrades are backend-enforced under /api/v1/billing/checkout."
-                  />
-                }
-              />
+              <Route path="/billing" element={<Billing />} />
             </Route>
           </Route>
 
