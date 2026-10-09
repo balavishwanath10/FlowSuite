@@ -405,3 +405,53 @@ export async function unlinkCustomerProjectApi(
     message: string;
   }>(`/customers/${customerId}/projects/${projectId}`, { method: 'DELETE' }, token);
 }
+
+/* ==========================================================================
+   DAY 19: AUDIT LOGS API CONTRACTS
+   ========================================================================== */
+
+export interface AuditLog {
+  id: string;
+  organizationId: string;
+  actorId: string | null;
+  action: string;
+  entityType: string | null;
+  entityId: string | null;
+  metadata: any;
+  createdAt: string;
+  actor?: {
+    id: string;
+    name: string;
+    email: string;
+  } | null;
+}
+
+export interface AuditLogPagination {
+  page: number;
+  limit: number;
+  total: number;
+  totalPages: number;
+}
+
+export async function getAuditLogsApi(
+  token: string,
+  params?: {
+    page?: number;
+    limit?: number;
+    action?: string;
+    actorId?: string;
+  },
+) {
+  const query = new URLSearchParams();
+  if (params?.page) query.append('page', params.page.toString());
+  if (params?.limit) query.append('limit', params.limit.toString());
+  if (params?.action) query.append('action', params.action);
+  if (params?.actorId) query.append('actorId', params.actorId);
+  const queryString = query.toString() ? `?${query.toString()}` : '';
+
+  return request<{
+    code: string;
+    auditLogs: AuditLog[];
+    pagination: AuditLogPagination;
+  }>(`/audit-logs${queryString}`, { method: 'GET' }, token);
+}

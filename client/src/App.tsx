@@ -8,6 +8,7 @@ import { Dashboard } from './pages/Dashboard';
 import { Projects } from './pages/Projects';
 import { Tasks } from './pages/Tasks';
 import { Customers } from './pages/Customers';
+import { AuditLogs } from './pages/AuditLogs';
 import { PlaceholderModule } from './pages/PlaceholderModule';
 
 export default function App() {
@@ -26,15 +27,7 @@ export default function App() {
               <Route path="/projects" element={<Projects />} />
               <Route path="/tasks" element={<Tasks />} />
               <Route path="/customers" element={<Customers />} />
-              <Route
-                path="/audit-logs"
-                element={
-                  <PlaceholderModule
-                    title="Organization Audit Logs"
-                    description="Paginated and filtered system audit log retrieval is backend-enforced for OWNER and ADMIN roles under /api/v1/audit-logs."
-                  />
-                }
-              />
+              <Route path="/audit-logs" element={<AuditLogs />} />
               <Route
                 path="/billing"
                 element={
