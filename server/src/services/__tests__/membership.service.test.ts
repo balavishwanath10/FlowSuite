@@ -9,6 +9,13 @@ const { mockPrisma, mockBcrypt } = vi.hoisted(() => ({
       create: vi.fn(),
       update: vi.fn(),
       delete: vi.fn(),
+      count: vi.fn(),
+    },
+    subscription: {
+      findUnique: vi.fn(),
+    },
+    plan: {
+      findUnique: vi.fn(),
     },
     user: {
       findUnique: vi.fn(),
@@ -33,6 +40,7 @@ vi.mock('bcrypt', () => ({
 }));
 
 import {
+  SeatLimitError,
   acceptInvitation,
   clearInvitationTokens,
   inviteOrganizationMember,
@@ -43,7 +51,8 @@ import {
 
 describe('Membership Service', () => {
   beforeEach(() => {
-    vi.clearAllMocks();
+    vi.resetAllMocks();
+    mockBcrypt.hash.mockResolvedValue('hashed-password');
     clearInvitationTokens();
   });
 
@@ -140,6 +149,31 @@ describe('Membership Service', () => {
           },
         },
       });
+    });
+
+    it('rejects invitation when organization seat limit is reached', async () => {
+      mockPrisma.subscription.findUnique.mockResolvedValue({
+        organizationId: 'org-1',
+        plan: {
+          id: 'plan-free',
+          name: 'Free',
+          seatLimit: 2,
+        },
+      });
+      mockPrisma.membership.count.mockResolvedValue(2); // Seat limit reached
+
+      await expect(
+        inviteOrganizationMember({
+          organizationId: 'org-1',
+          actorId: 'actor-1',
+          email: 'overlimit@example.com',
+          role: 'MEMBER',
+        }),
+      ).rejects.toThrow(
+        'Seat limit reached. Upgrade your plan to add more members.',
+      );
+
+      expect(mockPrisma.auditLog.create).not.toHaveBeenCalled();
     });
   });
 
@@ -302,6 +336,158 @@ describe('Membership Service', () => {
       await expect(
         acceptInvitation({ token: invite.invitationToken }),
       ).rejects.toThrow('Invalid or expired invitation token');
+    });
+
+    it('rejects invitation acceptance when organization seat limit is reached', async () => {
+      mockPrisma.user.findUnique.mockResolvedValue(null);
+      mockPrisma.auditLog.create.mockResolvedValue({ id: 'audit-1' });
+
+      const invite = await inviteOrganizationMember({
+        organizationId: 'org-1',
+        actorId: 'actor-1',
+        email: 'acceptoverlimit@example.com',
+        role: 'MEMBER',
+      });
+
+      mockPrisma.$transaction.mockImplementation(async (cb) => {
+        return cb(mockPrisma);
+      });
+      mockPrisma.subscription.findUnique.mockResolvedValue({
+        organizationId: 'org-1',
+        plan: {
+          id: 'plan-free',
+          name: 'Free',
+          seatLimit: 2,
+        },
+      });
+      mockPrisma.membership.count.mockResolvedValue(2); // Seat limit reached at acceptance time
+
+      await expect(
+        acceptInvitation({
+          token: invite.invitationToken,
+          name: 'Overlimit User',
+          password: 'Password123!',
+        }),
+      ).rejects.toThrow(
+        'Seat limit reached. Upgrade your plan to add more members.',
+      );
+
+      expect(mockPrisma.membership.create).not.toHaveBeenCalled();
+    });
+
+    it('counts pending invitations towards seat capacity when issuing new invitations', async () => {
+      mockPrisma.subscription.findUnique.mockResolvedValue({
+        organizationId: 'org-1',
+        plan: {
+          id: 'plan-free',
+          name: 'Free',
+          seatLimit: 2,
+        },
+      });
+      mockPrisma.membership.count.mockResolvedValue(1); // 1 active member
+
+      // First invitation succeeds (1 active + 0 pending + 1 new = 2 <= 2)
+      await inviteOrganizationMember({
+        organizationId: 'org-1',
+        actorId: 'actor-1',
+        email: 'pending1@example.com',
+        role: 'MEMBER',
+      });
+
+      // Second invitation is rejected (1 active + 1 pending + 1 new = 3 > 2)
+      await expect(
+        inviteOrganizationMember({
+          organizationId: 'org-1',
+          actorId: 'actor-1',
+          email: 'pending2@example.com',
+          role: 'MEMBER',
+        }),
+      ).rejects.toThrow(
+        'Seat limit reached. Upgrade your plan to add more members.',
+      );
+    });
+
+    it('returns duplicate member error when an existing member attempts to accept invitation', async () => {
+      mockPrisma.user.findUnique.mockResolvedValue(null);
+      mockPrisma.auditLog.create.mockResolvedValue({ id: 'audit-1' });
+
+      // Issue invitation
+      const invite = await inviteOrganizationMember({
+        organizationId: 'org-1',
+        actorId: 'actor-1',
+        email: 'already@example.com',
+        role: 'MEMBER',
+      });
+
+      // Setup transaction mocks: user exists and already has membership
+      mockPrisma.$transaction.mockImplementation(async (cb) => {
+        return cb(mockPrisma);
+      });
+      mockPrisma.user.findUnique.mockResolvedValue({
+        id: 'user-already',
+        email: 'already@example.com',
+      });
+      mockPrisma.membership.findUnique.mockResolvedValue({
+        id: 'mem-already',
+        organizationId: 'org-1',
+        userId: 'user-already',
+      });
+
+      // Attempting to accept should throw duplicate membership error, NOT seat limit error
+      await expect(
+        acceptInvitation({
+          token: invite.invitationToken,
+        }),
+      ).rejects.toThrow('User is already a member of this organization');
+    });
+
+    it('allows third seat and rejects fourth seat under Free plan seat limit (3 seats)', async () => {
+      mockPrisma.subscription.findUnique.mockResolvedValue({
+        organizationId: 'org-free',
+        plan: {
+          id: 'plan-free',
+          name: 'Free',
+          seatLimit: 3,
+        },
+      });
+
+      // 2 active members -> 3rd seat invite succeeds (2 active + 0 pending + 1 new = 3 <= 3)
+      mockPrisma.membership.count.mockResolvedValue(2);
+      const invite3 = await inviteOrganizationMember({
+        organizationId: 'org-free',
+        actorId: 'actor-1',
+        email: 'seat3@example.com',
+        role: 'MEMBER',
+      });
+      expect(invite3.email).toBe('seat3@example.com');
+
+      // 3 active members -> 4th seat invite fails (3 active + 0 pending + 1 new = 4 > 3)
+      mockPrisma.membership.count.mockResolvedValue(3);
+      await expect(
+        inviteOrganizationMember({
+          organizationId: 'org-free',
+          actorId: 'actor-1',
+          email: 'seat4@example.com',
+          role: 'MEMBER',
+        }),
+      ).rejects.toThrow(
+        'Seat limit reached. Upgrade your plan to add more members.',
+      );
+    });
+
+    it('falls back to Free plan seat limit (3 seats) when subscription and plan are missing from DB', async () => {
+      mockPrisma.subscription.findUnique.mockResolvedValue(null);
+      mockPrisma.plan.findUnique.mockResolvedValue(null);
+      mockPrisma.membership.count.mockResolvedValue(3); // 3 existing members
+
+      await expect(
+        inviteOrganizationMember({
+          organizationId: 'org-noplan',
+          actorId: 'actor-1',
+          email: 'noplan@example.com',
+          role: 'MEMBER',
+        }),
+      ).rejects.toThrow(SeatLimitError);
     });
   });
 

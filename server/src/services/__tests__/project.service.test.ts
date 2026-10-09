@@ -7,6 +7,13 @@ const { mockPrisma } = vi.hoisted(() => ({
       findFirst: vi.fn(),
       create: vi.fn(),
       update: vi.fn(),
+      count: vi.fn(),
+    },
+    subscription: {
+      findUnique: vi.fn(),
+    },
+    plan: {
+      findUnique: vi.fn(),
     },
     auditLog: {
       create: vi.fn(),
@@ -20,6 +27,7 @@ vi.mock('../../config/db', () => ({
 }));
 
 import {
+  ProjectLimitError,
   archiveProject,
   createProject,
   getProjectById,
@@ -76,6 +84,174 @@ describe('Project Service', () => {
         },
       });
       expect(result).toBe(mockProject);
+    });
+
+    it('rejects project creation when organization project limit is reached', async () => {
+      mockPrisma.$transaction.mockImplementation(async (cb) => cb(mockPrisma));
+      mockPrisma.subscription.findUnique.mockResolvedValue({
+        organizationId: 'org-1',
+        plan: {
+          id: 'plan-free',
+          name: 'Free',
+          projectLimit: 2,
+        },
+      });
+      mockPrisma.project.count.mockResolvedValue(2); // Current project count is 2 (equals limit)
+
+      await expect(
+        createProject({
+          organizationId: 'org-1',
+          actorId: 'user-1',
+          name: 'Third Project',
+        }),
+      ).rejects.toThrow(
+        'Project limit reached. Upgrade your plan to create more projects.',
+      );
+
+      expect(mockPrisma.project.create).not.toHaveBeenCalled();
+      expect(mockPrisma.auditLog.create).not.toHaveBeenCalled();
+    });
+
+    it('allows project creation when project count is below plan limit', async () => {
+      const mockProject = {
+        id: 'proj-2',
+        organizationId: 'org-1',
+        name: 'Second Project',
+        status: 'ACTIVE',
+      };
+
+      mockPrisma.$transaction.mockImplementation(async (cb) => cb(mockPrisma));
+      mockPrisma.subscription.findUnique.mockResolvedValue({
+        organizationId: 'org-1',
+        plan: {
+          id: 'plan-free',
+          name: 'Free',
+          projectLimit: 2,
+        },
+      });
+      mockPrisma.project.count.mockResolvedValue(1); // Current count is 1 (below limit of 2)
+      mockPrisma.project.create.mockResolvedValue(mockProject);
+      mockPrisma.auditLog.create.mockResolvedValue({ id: 'audit-2' });
+
+      const result = await createProject({
+        organizationId: 'org-1',
+        actorId: 'user-1',
+        name: 'Second Project',
+      });
+
+      expect(result).toBe(mockProject);
+      expect(mockPrisma.project.create).toHaveBeenCalled();
+    });
+
+    it('allows unlimited project creation when plan projectLimit is null', async () => {
+      const mockProject = {
+        id: 'proj-100',
+        organizationId: 'org-pro',
+        name: 'Project 100',
+        status: 'ACTIVE',
+      };
+
+      mockPrisma.$transaction.mockImplementation(async (cb) => cb(mockPrisma));
+      mockPrisma.subscription.findUnique.mockResolvedValue({
+        organizationId: 'org-pro',
+        plan: {
+          id: 'plan-pro',
+          name: 'Professional',
+          projectLimit: null, // Unlimited
+        },
+      });
+      mockPrisma.project.create.mockResolvedValue(mockProject);
+      mockPrisma.auditLog.create.mockResolvedValue({ id: 'audit-pro' });
+
+      const result = await createProject({
+        organizationId: 'org-pro',
+        actorId: 'user-1',
+        name: 'Project 100',
+      });
+
+      expect(result).toBe(mockProject);
+      expect(mockPrisma.project.count).not.toHaveBeenCalled(); // Skipped because limit is null
+      expect(mockPrisma.project.create).toHaveBeenCalled();
+    });
+
+    it('falls back to default Free plan limit when subscription record is missing', async () => {
+      mockPrisma.$transaction.mockImplementation(async (cb) => cb(mockPrisma));
+      mockPrisma.subscription.findUnique.mockResolvedValue(null); // Missing subscription
+      mockPrisma.plan.findUnique.mockResolvedValue({
+        id: 'plan-free-default',
+        name: 'Free',
+        projectLimit: 2,
+      });
+      mockPrisma.project.count.mockResolvedValue(2); // At Free limit of 2
+
+      await expect(
+        createProject({
+          organizationId: 'org-nosub',
+          actorId: 'user-1',
+          name: 'Fallback Overlimit Project',
+        }),
+      ).rejects.toThrow(
+        'Project limit reached. Upgrade your plan to create more projects.',
+      );
+
+      expect(mockPrisma.plan.findUnique).toHaveBeenCalledWith({
+        where: { name: 'Free' },
+      });
+      expect(mockPrisma.project.create).not.toHaveBeenCalled();
+    });
+
+    it('does not count archived projects towards active project limit', async () => {
+      const mockProject = {
+        id: 'proj-3',
+        organizationId: 'org-1',
+        name: 'New Active Project',
+        status: 'ACTIVE',
+      };
+
+      mockPrisma.$transaction.mockImplementation(async (cb) => cb(mockPrisma));
+      mockPrisma.subscription.findUnique.mockResolvedValue({
+        organizationId: 'org-1',
+        plan: {
+          id: 'plan-free',
+          name: 'Free',
+          projectLimit: 2,
+        },
+      });
+      // Mock count for ACTIVE projects returns 1 (even if total including ARCHIVED was 2)
+      mockPrisma.project.count.mockResolvedValue(1);
+      mockPrisma.project.create.mockResolvedValue(mockProject);
+      mockPrisma.auditLog.create.mockResolvedValue({ id: 'audit-archived-test' });
+
+      const result = await createProject({
+        organizationId: 'org-1',
+        actorId: 'user-1',
+        name: 'New Active Project',
+      });
+
+      expect(mockPrisma.project.count).toHaveBeenCalledWith({
+        where: {
+          organizationId: 'org-1',
+          status: 'ACTIVE',
+        },
+      });
+      expect(result).toBe(mockProject);
+    });
+
+    it('falls back to Free plan project limit (2 projects) when subscription and plan are missing from DB', async () => {
+      mockPrisma.$transaction.mockImplementation(async (cb) => cb(mockPrisma));
+      mockPrisma.subscription.findUnique.mockResolvedValue(null);
+      mockPrisma.plan.findUnique.mockResolvedValue(null);
+      mockPrisma.project.count.mockResolvedValue(2); // 2 existing active projects
+
+      await expect(
+        createProject({
+          organizationId: 'org-noplan',
+          actorId: 'user-1',
+          name: '3rd Project',
+        }),
+      ).rejects.toThrow(ProjectLimitError);
+
+      expect(mockPrisma.project.create).not.toHaveBeenCalled();
     });
   });
 

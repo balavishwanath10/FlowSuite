@@ -1,4 +1,5 @@
 import { prisma } from '../config/db';
+import { checkProjectLimit } from './subscription.service';
 
 type ProjectStatus = 'ACTIVE' | 'ARCHIVED';
 
@@ -39,6 +40,21 @@ type ArchiveProjectInput = {
   projectId: string;
 };
 
+const DEFAULT_FREE_PLAN = {
+  name: 'Free',
+  seatLimit: 3,
+  projectLimit: 2,
+};
+
+export class ProjectLimitError extends Error {
+  constructor(
+    message = 'Project limit reached. Upgrade your plan to create more projects.',
+  ) {
+    super(message);
+    this.name = 'ProjectLimitError';
+  }
+}
+
 export const createProject = async ({
   organizationId,
   actorId,
@@ -46,6 +62,37 @@ export const createProject = async ({
   description,
 }: CreateProjectInput) => {
   return prisma.$transaction(async (tx) => {
+    const subscription = tx.subscription
+      ? await tx.subscription.findUnique({
+          where: { organizationId },
+          include: { plan: true },
+        })
+      : null;
+
+    const dbFreePlan = tx.plan
+      ? await tx.plan.findUnique({
+          where: { name: 'Free' },
+        })
+      : null;
+
+    const effectivePlan = subscription?.plan ?? dbFreePlan ?? DEFAULT_FREE_PLAN;
+
+    if (effectivePlan.projectLimit !== null) {
+      const currentProjectCount = await tx.project.count({
+        where: {
+          organizationId,
+          status: 'ACTIVE',
+        },
+      });
+
+      if (
+        typeof currentProjectCount === 'number' &&
+        !checkProjectLimit(effectivePlan, currentProjectCount + 1)
+      ) {
+        throw new ProjectLimitError();
+      }
+    }
+
     const project = await tx.project.create({
       data: {
         organizationId,

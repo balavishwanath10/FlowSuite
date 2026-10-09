@@ -11,6 +11,7 @@ import {
   inviteOrganizationMember,
   listOrganizationMembers,
   removeOrganizationMember,
+  SeatLimitError,
   updateMemberRole,
 } from '../services/membership.service';
 
@@ -107,6 +108,16 @@ router.post(
       const message =
         error instanceof Error ? error.message : 'Unable to invite member';
 
+      if (
+        error instanceof SeatLimitError ||
+        message.includes('Seat limit reached')
+      ) {
+        return res.status(403).json({
+          code: 'SEAT_LIMIT_EXCEEDED',
+          message,
+        });
+      }
+
       return res.status(400).json({
         code: 'MEMBER_INVITATION_FAILED',
         message,
@@ -137,6 +148,16 @@ router.post('/accept-invite', async (req: Request, res: Response) => {
   } catch (error) {
     const message =
       error instanceof Error ? error.message : 'Unable to accept invitation';
+
+    if (
+      error instanceof SeatLimitError ||
+      message.includes('Seat limit reached')
+    ) {
+      return res.status(403).json({
+        code: 'SEAT_LIMIT_EXCEEDED',
+        message,
+      });
+    }
 
     return res.status(400).json({
       code: 'INVITATION_ACCEPTANCE_FAILED',

@@ -1,6 +1,7 @@
 import bcrypt from 'bcrypt';
 import crypto from 'crypto';
 import { prisma } from '../config/db';
+import { checkSeatLimit } from './subscription.service';
 
 type Role = 'OWNER' | 'ADMIN' | 'MANAGER' | 'MEMBER';
 
@@ -47,6 +48,17 @@ interface InvitationRecord {
 
 const invitationTokens = new Map<string, InvitationRecord>();
 
+const getPendingInvitationCount = (organizationId: string): number => {
+  const now = Date.now();
+  let count = 0;
+  for (const invitation of invitationTokens.values()) {
+    if (invitation.organizationId === organizationId && invitation.expiresAt > now) {
+      count++;
+    }
+  }
+  return count;
+};
+
 export const clearInvitationTokens = () => {
   invitationTokens.clear();
 };
@@ -73,6 +85,21 @@ export const listOrganizationMembers = async ({
     },
   });
 };
+
+const DEFAULT_FREE_PLAN = {
+  name: 'Free',
+  seatLimit: 3,
+  projectLimit: 2,
+};
+
+export class SeatLimitError extends Error {
+  constructor(
+    message = 'Seat limit reached. Upgrade your plan to add more members.',
+  ) {
+    super(message);
+    this.name = 'SeatLimitError';
+  }
+}
 
 export const inviteOrganizationMember = async ({
   organizationId,
@@ -103,6 +130,34 @@ export const inviteOrganizationMember = async ({
     if (existingMembership) {
       throw new Error('User is already a member of this organization');
     }
+  }
+
+  const subscription = prisma.subscription
+    ? await prisma.subscription.findUnique({
+        where: { organizationId },
+        include: { plan: true },
+      })
+    : null;
+
+  const dbFreePlan = prisma.plan
+    ? await prisma.plan.findUnique({
+        where: { name: 'Free' },
+      })
+    : null;
+
+  const effectivePlan = subscription?.plan ?? dbFreePlan ?? DEFAULT_FREE_PLAN;
+
+  const currentMemberCount = await prisma.membership.count({
+    where: { organizationId },
+  });
+
+  const pendingInviteCount = getPendingInvitationCount(organizationId);
+
+  if (
+    typeof currentMemberCount === 'number' &&
+    !checkSeatLimit(effectivePlan, currentMemberCount + pendingInviteCount + 1)
+  ) {
+    throw new SeatLimitError();
   }
 
   const token = crypto.randomBytes(32).toString('hex');
@@ -159,6 +214,47 @@ export const acceptInvitation = async ({
     let user = await tx.user.findUnique({
       where: { email },
     });
+
+    if (user) {
+      const existingMembership = await tx.membership.findUnique({
+        where: {
+          organizationId_userId: {
+            organizationId,
+            userId: user.id,
+          },
+        },
+      });
+
+      if (existingMembership) {
+        throw new Error('User is already a member of this organization');
+      }
+    }
+
+    const subscription = tx.subscription
+      ? await tx.subscription.findUnique({
+          where: { organizationId },
+          include: { plan: true },
+        })
+      : null;
+
+    const dbFreePlan = tx.plan
+      ? await tx.plan.findUnique({
+          where: { name: 'Free' },
+        })
+      : null;
+
+    const effectivePlan = subscription?.plan ?? dbFreePlan ?? DEFAULT_FREE_PLAN;
+
+    const currentMemberCount = await tx.membership.count({
+      where: { organizationId },
+    });
+
+    if (
+      typeof currentMemberCount === 'number' &&
+      !checkSeatLimit(effectivePlan, currentMemberCount + 1)
+    ) {
+      throw new SeatLimitError();
+    }
 
     if (!user) {
       if (!name || !password) {

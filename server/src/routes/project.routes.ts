@@ -11,6 +11,7 @@ import {
   createProject,
   getProjectById,
   listOrganizationProjects,
+  ProjectLimitError,
   updateProject,
 } from '../services/project.service';
 
@@ -167,6 +168,16 @@ router.post(
     } catch (error) {
       const message =
         error instanceof Error ? error.message : 'Unable to create project';
+
+      if (
+        error instanceof ProjectLimitError ||
+        message.includes('Project limit reached')
+      ) {
+        return res.status(403).json({
+          code: 'PROJECT_LIMIT_EXCEEDED',
+          message,
+        });
+      }
 
       return res.status(400).json({
         code: 'PROJECT_CREATION_FAILED',
